@@ -17,7 +17,7 @@ def add_music_to_videos(video_folder, music_folder, output_folder):
     music_files = [f for f in os.listdir(music_folder) if f.lower().endswith((".mp3", ".wav"))]
     count = 1
     # 遍历视频文件夹中的每个视频文件
-    for video_file in video_files[:3]:
+    for video_file in video_files:
         video_path = os.path.join(video_folder, video_file)
         video_name = video_path.split('\\')[-1]
         output_path = os.path.join(output_folder, f"{video_name.split('.')[0]}_music.{video_name.split('.')[-1]}")
