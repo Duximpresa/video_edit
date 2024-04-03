@@ -81,9 +81,11 @@ def generate_clips(folder_path_list, number_of_videos, clip_duration, output_fil
 def video_generator(clips, output_file, with_audio=True):
     # 连接所有片段以创建最终视频
     final_clip = concatenate_videoclips(clips)
+    # final_clip = clips
 
     # 将结果写入输出文件
     final_clip.write_videofile(output_file, audio_codec='aac' if with_audio else None)
+    # final_clip.write_videofile(output_file, audio_codec=None,  codec="libx264")
 
 #生成唯一文件名
 def generate_datetime_string(prefix):
@@ -112,14 +114,14 @@ def multiple_video_generation():
                         'input/video_03/']
 
     #每个文件夹选几个视频
-    number_of_video_01 = 3
-    number_of_video_02 = 3
-    number_of_video_03 = 3
+    number_of_video_01 = 4
+    number_of_video_02 = 2
+    number_of_video_03 = 2
 
     #每个片段截取多少秒
     clip_duration = 2
     clip_duration_01 = clip_duration
-    clip_duration_02 = clip_duration
+    clip_duration_02 = 3
     clip_duration_03 = clip_duration
 
     #片段截取
@@ -132,12 +134,14 @@ def multiple_video_generation():
 
     #合并片段，生成视频
     video_name = generate_datetime_string(project_name)
-    output_file = os.path.join(output_folder, video_name)
+    print(video_name)
+    output_file = f'{os.path.join(output_folder, video_name)}.mp4'
+    print(output_file)
     video_generator(clips, output_file, with_audio=False)
 
 def main():
-    generated_quantity = 1
-    for i in generated_quantity:
+    generated_quantity = 50
+    for i in range(generated_quantity):
         multiple_video_generation()
 
 
