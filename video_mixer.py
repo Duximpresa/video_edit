@@ -35,7 +35,7 @@ def generate_random_float(number, range_control):
 
 
 # 从指定文件夹中的视频中随机挑选片段，然后合成一个新视频的函数
-def create_video_montage(folder_path, number_of_videos, clip_duration, output_file, with_audio=True):
+def create_video_montage(folder_path, number_of_videos, clip_duration, with_audio=False):
     # 从指定文件夹获取所有视频文件
     video_files = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if
                    f.endswith(('.mp4', '.avi', '.mov'))]
@@ -75,7 +75,8 @@ def create_video_montage(folder_path, number_of_videos, clip_duration, output_fi
 def generate_clips(folder_path_list, number_of_videos, clip_duration, output_file):
     clips = []
     for folder_path in folder_path_list:
-        create_video_montage(folder_path, number_of_videos, clip_duration, output_file, with_audio=True)
+        clip = create_video_montage(folder_path, number_of_videos, clip_duration, output_file, with_audio=False)
+        clips.append(clip)
 
 def video_generator(clips, output_file, with_audio=True):
     # 连接所有片段以创建最终视频
@@ -84,6 +85,7 @@ def video_generator(clips, output_file, with_audio=True):
     # 将结果写入输出文件
     final_clip.write_videofile(output_file, audio_codec='aac' if with_audio else None)
 
+#生成唯一文件名
 def generate_datetime_string(prefix):
     # 获取当前的日期和时间
     now = datetime.now()
@@ -99,11 +101,45 @@ def generate_datetime_string(prefix):
 
 # 打印成功消息
 # print("视频集锦已成功创建。")
+def multiple_video_generation():
+    #总参数设置
+    project_name = '卖蛇视频'
+    output_folder = 'output\\0403'
+
+    #输入文件夹，按类型分好
+    folder_path_list = ['input/video_01/',
+                        'input/video_02/',
+                        'input/video_03/']
+
+    #每个文件夹选几个视频
+    number_of_video_01 = 3
+    number_of_video_02 = 3
+    number_of_video_03 = 3
+
+    #每个片段截取多少秒
+    clip_duration = 2
+    clip_duration_01 = clip_duration
+    clip_duration_02 = clip_duration
+    clip_duration_03 = clip_duration
+
+    #片段截取
+    clip_01 = create_video_montage(folder_path_list[0], number_of_video_01, clip_duration_01, with_audio=False)
+    clip_02 = create_video_montage(folder_path_list[1], number_of_video_02, clip_duration_02, with_audio=False)
+    clip_03 = create_video_montage(folder_path_list[2], number_of_video_03, clip_duration_03, with_audio=False)
+
+    #拼合片段列表
+    clips = clip_01 + clip_02 + clip_03
+
+    #合并片段，生成视频
+    video_name = generate_datetime_string(project_name)
+    output_file = os.path.join(output_folder, video_name)
+    video_generator(clips, output_file, with_audio=False)
+
 def main():
-    folder_path_list = []
-    number_of_videos = 5
-    clip_duration = 3
-    output_path = 'output'
+    generated_quantity = 1
+    for i in generated_quantity:
+        multiple_video_generation()
+
 
 if __name__ == '__main__':
     main()
