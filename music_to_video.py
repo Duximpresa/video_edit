@@ -48,7 +48,8 @@ def add_music_to_videos(video_folder, music_folder, output_folder):
         # # 保存成新的视频文件
         # output_path = os.path.join(output_folder, f"{video_name.split('.')[0]}_music.{video_name.split('.')[-1]}")
 
-        final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac", bitrate="10000k", audio_bitrate='192k')
+        # final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac", bitrate="10000k", audio_bitrate='192k')
+        final_clip.write_videofile(output_path, codec="h264_nvenc", audio_codec="aac", bitrate="20000k", audio_bitrate='192k')
         #
         # print(f"已为视频文件 {video_file} 添加了音乐并保存到 {output_path}")
         print('-' * 50)
@@ -59,9 +60,11 @@ def add_music_to_videos(video_folder, music_folder, output_folder):
 
 
 def main():
-    video_folder_path = "output\\0403"
+    video_folder_path = "output\\造粒机混剪\\0731\\text_to_video"
     music_folder_path = "BGM"
-    output_folder_path = "output\\0403\\music_to_video"
+    output_folder_path = "output\\造粒机混剪\\0731\\music_to_video"
+    if not os.path.exists(output_folder_path):
+        os.makedirs(output_folder_path)
     add_music_to_videos(video_folder_path, music_folder_path, output_folder_path)
 
 if __name__ == "__main__":

@@ -14,7 +14,8 @@ def random_clip(video_path, clip_duration, output_path):
     clip = video.subclip(start_time, start_time + clip_duration)
 
     # 输出视频片段
-    clip.write_videofile(output_path, codec='libx264')
+    # clip.write_videofile(output_path, codec='libx264')
+    clip.write_videofile(output_path, codec='h264_nvenc')
 
 
 def generate_random_float(number, range_control):
@@ -67,16 +68,15 @@ def create_video_montage(folder_path, number_of_videos, clip_duration, with_audi
 
         # 将子片段添加到片段列表中
         clips.append(subclip)
+        # subclip.close()
+        # video_clip.close()
+        # video_clip.close()
 
     # 随机打乱片段列表
+    # print(clips)
     random.shuffle(clips)
     return clips
 
-def generate_clips(folder_path_list, number_of_videos, clip_duration, output_file):
-    clips = []
-    for folder_path in folder_path_list:
-        clip = create_video_montage(folder_path, number_of_videos, clip_duration, output_file, with_audio=False)
-        clips.append(clip)
 
 def video_generator(clips, output_file, with_audio=True):
     # 连接所有片段以创建最终视频
@@ -84,8 +84,10 @@ def video_generator(clips, output_file, with_audio=True):
     # final_clip = clips
 
     # 将结果写入输出文件
-    final_clip.write_videofile(output_file, audio_codec='aac' if with_audio else None)
-    # final_clip.write_videofile(output_file, audio_codec=None,  codec="libx264")
+    # final_clip.write_videofile(output_file, audio_codec='aac' if with_audio else None)
+    # final_clip.write_videofile(output_file, audio_codec=None,  codec="libx264", bitrate="20000k")
+    final_clip.write_videofile(output_file, audio_codec=None,  codec="h264_nvenc", bitrate="20000k")
+    final_clip.close()
 
 #生成唯一文件名
 def generate_datetime_string(prefix):
@@ -105,24 +107,26 @@ def generate_datetime_string(prefix):
 # print("视频集锦已成功创建。")
 def multiple_video_generation():
     #总参数设置
-    project_name = '卖蛇视频'
-    output_folder = 'output\\0403'
+    project_name = '造粒机混剪'
+    output_folder = 'output\\造粒机混剪\\0809'
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
 
     #输入文件夹，按类型分好
-    folder_path_list = ['input/video_01/',
-                        'input/video_02/',
-                        'input/video_03/']
+    folder_path_list = ['input/造粒机/07-31/01/',
+                        'input/造粒机/07-31/02/',
+                        'input/造粒机/07-31/03/']
 
     #每个文件夹选几个视频
-    number_of_video_01 = 4
-    number_of_video_02 = 2
-    number_of_video_03 = 2
+    number_of_video_01 = 1
+    number_of_video_02 = 8
+    number_of_video_03 = 1
 
     #每个片段截取多少秒
-    clip_duration = 2
-    clip_duration_01 = clip_duration
+    clip_duration = 3
+    clip_duration_01 = 2
     clip_duration_02 = 3
-    clip_duration_03 = clip_duration
+    clip_duration_03 = 2
 
     #片段截取
     clip_01 = create_video_montage(folder_path_list[0], number_of_video_01, clip_duration_01, with_audio=False)
@@ -131,6 +135,7 @@ def multiple_video_generation():
 
     #拼合片段列表
     clips = clip_01 + clip_02 + clip_03
+    # clips = clip_01 + clip_02
 
     #合并片段，生成视频
     video_name = generate_datetime_string(project_name)
@@ -139,8 +144,9 @@ def multiple_video_generation():
     print(output_file)
     video_generator(clips, output_file, with_audio=False)
 
+
 def main():
-    generated_quantity = 50
+    generated_quantity = 3
     for i in range(generated_quantity):
         multiple_video_generation()
 
