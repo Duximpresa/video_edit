@@ -51,6 +51,8 @@ def create_video_montage(folder_path, number_of_videos, clip_duration, with_audi
     for video in selected_videos:
         # 加载视频文件
         video_clip = VideoFileClip(video)
+        video_clip = video_clip.resize((1080, 1920))
+        print(video_clip.size)
 
         # 随机选择片段的开始时间
         number = clip_duration
@@ -81,6 +83,8 @@ def create_video_montage(folder_path, number_of_videos, clip_duration, with_audi
 def video_generator(clips, output_file, with_audio=True):
     # 连接所有片段以创建最终视频
     final_clip = concatenate_videoclips(clips)
+    # final_clip.size = [2160, 3840]
+    print(f'成片尺寸：{final_clip.size}')
     # final_clip = clips
 
     # 将结果写入输出文件
@@ -144,11 +148,58 @@ def multiple_video_generation():
     print(output_file)
     video_generator(clips, output_file, with_audio=False)
 
+def multiple_video_generation_2():
+    #总参数设置
+    project_name = '图书_男孩女孩你该如何保护自己'
+    output_folder = 'output\\图书\\男孩女孩你该如何保护自己'
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    #输入文件夹，按类型分好
+    folder_path_list = ['input/2024.4.1男孩女孩你该如何保护自己2/音频+素材2/素材/开头结尾',
+                        'input/2024.4.1男孩女孩你该如何保护自己2/音频+素材2/素材/标题集',
+                        'input/2024.4.1男孩女孩你该如何保护自己2/音频+素材2/素材/翻书',
+                        'input/2024.4.1男孩女孩你该如何保护自己2/音频+素材2/素材/合书',
+                        'input/2024.4.1男孩女孩你该如何保护自己2/音频+素材2/素材/开头结尾']
+
+    #每个文件夹选几个视频
+    number_of_video_01 = 1
+    number_of_video_02 = 1
+    number_of_video_03 = 5
+    number_of_video_04 = 1
+    number_of_video_05 = 1
+
+    #每个片段截取多少秒
+    clip_duration = 3
+    clip_duration_01 = 2
+    clip_duration_02 = 2
+    clip_duration_03 = 2
+    clip_duration_04 = 3
+    clip_duration_05 = 3
+
+    #片段截取
+    clip_01 = create_video_montage(folder_path_list[0], number_of_video_01, clip_duration_01, with_audio=False)
+    clip_02 = create_video_montage(folder_path_list[1], number_of_video_02, clip_duration_02, with_audio=False)
+    clip_03 = create_video_montage(folder_path_list[2], number_of_video_03, clip_duration_03, with_audio=False)
+    clip_04 = create_video_montage(folder_path_list[3], number_of_video_04, clip_duration_04, with_audio=False)
+    clip_05 = create_video_montage(folder_path_list[4], number_of_video_05, clip_duration_05, with_audio=False)
+
+    #拼合片段列表
+    clips = clip_01 + clip_02 + clip_03 + clip_04
+    # clips = clip_01 + clip_02
+
+    #合并片段，生成视频
+    video_name = generate_datetime_string(project_name)
+    print(video_name)
+    output_file = f'{os.path.join(output_folder, video_name)}.mp4'
+    print(output_file)
+    video_generator(clips, output_file, with_audio=False)
 
 def main():
-    generated_quantity = 3
+    generated_quantity = 1
     for i in range(generated_quantity):
-        multiple_video_generation()
+        # multiple_video_generation()
+        multiple_video_generation_2()
 
 
 if __name__ == '__main__':
