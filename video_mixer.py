@@ -1,9 +1,14 @@
 import os
 import random
 from moviepy.editor import VideoFileClip, concatenate_videoclips
+from moviepy.editor import *
+# from moviepy.audio.io import AudioFileClip
 from datetime import datetime
+from app import voice
+from utils import utils
+import azure.cognitiveservices.speech as speechsdk
 
-
+root_dir = utils.root_dir()
 def random_clip(video_path, clip_duration, output_path):
     # 加载视频
     video = VideoFileClip(video_path)
@@ -102,13 +107,11 @@ def generate_datetime_string(prefix):
     # 返回带有前缀的日期和时间字符串
     return f"{prefix}_{datetime_string}"
 
+def get_bgm_list_choice(BGM_folder):
+    BGM_list = [f for f in os.listdir(BGM_folder) if f.lower().endswith((".mp3", ".wav"))]
+    random.shuffle(BGM_list)
+    return random.choice(BGM_list)
 
-# video_name = generate_datetime_string('video')
-# 示例用法
-# create_video_montage('input/', 6, 4, f'output/{video_name}.mp4', with_audio=False)
-
-# 打印成功消息
-# print("视频集锦已成功创建。")
 def multiple_video_generation():
     #总参数设置
     project_name = '造粒机混剪'
@@ -148,59 +151,122 @@ def multiple_video_generation():
     print(output_file)
     video_generator(clips, output_file, with_audio=False)
 
-def multiple_video_generation_2():
-    #总参数设置
-    project_name = '图书_男孩女孩你该如何保护自己'
-    output_folder = 'output\\图书\\男孩女孩你该如何保护自己'
+def multiple_video_voice_bgm_generation(project_name,
+                                        output_folder,
+                                        folder_path_list,
+                                        number_of_video_dict,
+                                        voice_txt_file,
+                                        voice_name,
+                                        speech_config,
+                                        bgm_folder_path):
+    #检查输出文件夹
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
+    # 生成配音
+    voice_filename = voice.text2speech(voice_txt_file, voice_name, project_name, speech_config)
+
+    # 随机选择BGM
+    bgm_file = get_bgm_list_choice(bgm_folder_path)
+    print(bgm_file)
+    bgm_file_path = os.path.join(root_dir, bgm_folder_path, bgm_file)
+    # print(bgm_file_path)
+
+
+
     #输入文件夹，按类型分好
+    # folder_path_list = ['input/2024.4.1男孩女孩你该如何保护自己2/音频+素材2/素材/开头结尾',
+    #                     'input/2024.4.1男孩女孩你该如何保护自己2/音频+素材2/素材/标题集',
+    #                     'input/2024.4.1男孩女孩你该如何保护自己2/音频+素材2/素材/翻书',
+    #                     'input/2024.4.1男孩女孩你该如何保护自己2/音频+素材2/素材/合书',
+    #                     'input/2024.4.1男孩女孩你该如何保护自己2/音频+素材2/素材/开头结尾']
+
+    #每个文件夹选几个视频
+    # number_of_video_01 = 1
+    # number_of_video_02 = 1
+    # number_of_video_03 = 5
+    # number_of_video_04 = 1
+    # number_of_video_05 = 1
+
+    #每个片段截取多少秒
+    # clip_duration = 3
+    # clip_duration_01 = 2
+    # clip_duration_02 = 2
+    # clip_duration_03 = 2
+    # clip_duration_04 = 3
+    # clip_duration_05 = 3
+
+    #片段截取
+    # clip_01 = create_video_montage(folder_path_list[0], number_of_video_01, clip_duration_01, with_audio=False)
+    # clip_02 = create_video_montage(folder_path_list[1], number_of_video_02, clip_duration_02, with_audio=False)
+    # clip_03 = create_video_montage(folder_path_list[2], number_of_video_03, clip_duration_03, with_audio=False)
+    # clip_04 = create_video_montage(folder_path_list[3], number_of_video_04, clip_duration_04, with_audio=False)
+    # clip_05 = create_video_montage(folder_path_list[4], number_of_video_05, clip_duration_05, with_audio=False)
+
+    #拼合片段列表
+    # clips = clip_01 + clip_02 + clip_03 + clip_04
+    # clips = clip_01 + clip_02
+
+    #合并片段，生成视频
+    # video_name = generate_datetime_string(project_name)
+    # print(video_name)
+    # output_file = f'{os.path.join(output_folder, video_name)}.mp4'
+    # print(output_file)
+    # video_generator(clips, output_file, with_audio=False)
+
+def main():
+    project_name = '测试项目'
+    output_folder = 'output\\图书\\男孩女孩你该如何保护自己'
+    bgm_folder_path = 'BGM'
+
+    # 配音部分参数
+    voice_txt_file = f'{root_dir}/input/Voice_Text/摆地摊.txt'
+    voice_name = "zh-CN-XiaoxiaoMultilingualNeural"
+    speech_key = "8b7335e4c1cf4708a48453f878a6c802"
+    service_region = "southeastasia"
+    speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=service_region)
+    speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Riff44100Hz16BitMonoPcm)
+
+    # 输入文件夹，按类型分好
     folder_path_list = ['input/2024.4.1男孩女孩你该如何保护自己2/音频+素材2/素材/开头结尾',
                         'input/2024.4.1男孩女孩你该如何保护自己2/音频+素材2/素材/标题集',
                         'input/2024.4.1男孩女孩你该如何保护自己2/音频+素材2/素材/翻书',
                         'input/2024.4.1男孩女孩你该如何保护自己2/音频+素材2/素材/合书',
                         'input/2024.4.1男孩女孩你该如何保护自己2/音频+素材2/素材/开头结尾']
-
-    #每个文件夹选几个视频
-    number_of_video_01 = 1
-    number_of_video_02 = 1
-    number_of_video_03 = 5
-    number_of_video_04 = 1
-    number_of_video_05 = 1
-
-    #每个片段截取多少秒
-    clip_duration = 3
-    clip_duration_01 = 2
-    clip_duration_02 = 2
-    clip_duration_03 = 2
-    clip_duration_04 = 3
-    clip_duration_05 = 3
-
-    #片段截取
-    clip_01 = create_video_montage(folder_path_list[0], number_of_video_01, clip_duration_01, with_audio=False)
-    clip_02 = create_video_montage(folder_path_list[1], number_of_video_02, clip_duration_02, with_audio=False)
-    clip_03 = create_video_montage(folder_path_list[2], number_of_video_03, clip_duration_03, with_audio=False)
-    clip_04 = create_video_montage(folder_path_list[3], number_of_video_04, clip_duration_04, with_audio=False)
-    clip_05 = create_video_montage(folder_path_list[4], number_of_video_05, clip_duration_05, with_audio=False)
-
-    #拼合片段列表
-    clips = clip_01 + clip_02 + clip_03 + clip_04
-    # clips = clip_01 + clip_02
-
-    #合并片段，生成视频
-    video_name = generate_datetime_string(project_name)
-    print(video_name)
-    output_file = f'{os.path.join(output_folder, video_name)}.mp4'
-    print(output_file)
-    video_generator(clips, output_file, with_audio=False)
-
-def main():
+    number_of_video_dict = {'number_of_video_1': 1,
+                            'number_of_video_2': 1,
+                            'number_of_video_3': 5,
+                            'number_of_video_4': 1,
+                            'number_of_video_5': 1}
     generated_quantity = 1
     for i in range(generated_quantity):
         # multiple_video_generation()
-        multiple_video_generation_2()
+        multiple_video_voice_bgm_generation(project_name=project_name,
+                                            output_folder=output_folder,
+                                            folder_path_list=folder_path_list,
+                                            number_of_video_dict=number_of_video_dict,
+                                            voice_txt_file=voice_txt_file,
+                                            voice_name=voice_name,
+                                            speech_config=speech_config,
+                                            bgm_folder_path=bgm_folder_path)
+
+
+def main2():
+    audio_volumex = 3
+    bgm_volumex = 0.2
+
+    bgm_folder_path = 'BGM'
+    bgm_file = get_bgm_list_choice(bgm_folder_path)
+    print(bgm_file)
+    bgm_file_path = os.path.join(root_dir, bgm_folder_path, bgm_file)
+    voice_filename = 'storage/Voices/测试项目_fabdf1707ce6133379d73e94ba529f52650ba0378fdaed2b6eb0e8cefde052b7.wav'
+    audio_clip = AudioFileClip(voice_filename).volumex(audio_volumex)
+    bgm_clip = AudioFileClip(bgm_file_path).volumex(bgm_volumex)
+    bgm_clip = afx.audio_loop(bgm_clip, duration=audio_clip.duration)
+    bgm_clip = bgm_clip.set_start(0)
+    composite_audio = CompositeAudioClip([audio_clip, bgm_clip])
+    composite_audio.write_audiofile('test.mp3', codec='libmp3lame', fps=audio_clip.fps)
 
 
 if __name__ == '__main__':
-    main()
+    main2()
