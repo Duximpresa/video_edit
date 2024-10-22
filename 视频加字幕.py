@@ -106,7 +106,10 @@ def add_text_to_videos(video_folder, texts, output_folder):
         output_path = os.path.join(output_folder, f"{video_name.split('.')[0]}_text.{video_name.split('.')[-1]}")
 
         # # 添加文本
-        video_text(video_path, texts, output_path)
+        if not os.path.exists(output_path):
+            video_text(video_path, texts, output_path)
+        else:
+            print(f"文件：【{output_path}】 已存在")
 
         print('-' * 50)
         print(f'{output_path_name}_已完成_【OK】')
@@ -117,13 +120,13 @@ def add_text_to_videos(video_folder, texts, output_folder):
 def main():
 
     texts = '''
-    得知我们的造粒机产能高后
-    每天都有很多老板带料来挤压
-    厂里也越来越热闹了
+校服正在打包发货中
+当天拍下次日达 
+感谢各位家长对咱们的支持
     '''
 
-    video_folder_path = 'output/造粒机混剪/0731'
-    output_folder_path = 'output/造粒机混剪/0731/text_to_video'
+    video_folder_path = 'output/赫学熊/0829'
+    output_folder_path = 'output/赫学熊/0829/text_to_video'
     if not os.path.exists(output_folder_path):
         os.makedirs(output_folder_path)
 

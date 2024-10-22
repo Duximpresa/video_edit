@@ -8,8 +8,12 @@ from app import voice
 from utils import utils
 import azure.cognitiveservices.speech as speechsdk
 # from moviepy.video import fx
+from concurrent.futures import ThreadPoolExecutor
+from multiprocessing import Process
 
 root_dir = utils.root_dir()
+
+
 def random_clip(video_path, clip_duration, output_path):
     # 加载视频
     video = VideoFileClip(video_path)
@@ -96,10 +100,11 @@ def video_generator(clips, output_file, with_audio=True):
     # 将结果写入输出文件
     # final_clip.write_videofile(output_file, audio_codec='aac' if with_audio else None)
     # final_clip.write_videofile(output_file, audio_codec=None,  codec="libx264", bitrate="20000k")
-    final_clip.write_videofile(output_file, audio_codec=None,  codec="h264_nvenc", bitrate="35000k")
+    final_clip.write_videofile(output_file, audio_codec=None, codec="h264_nvenc", bitrate="35000k")
     final_clip.close()
 
-#生成唯一文件名
+
+# 生成唯一文件名
 def generate_datetime_string(prefix):
     # 获取当前的日期和时间
     now = datetime.now()
@@ -108,59 +113,61 @@ def generate_datetime_string(prefix):
     # 返回带有前缀的日期和时间字符串
     return f"{prefix}_{datetime_string}"
 
+
 def get_bgm_list_choice(BGM_folder):
     BGM_list = [f for f in os.listdir(BGM_folder) if f.lower().endswith((".mp3", ".wav"))]
     random.shuffle(BGM_list)
     return random.choice(BGM_list)
 
+
 def multiple_video_generation():
-    #总参数设置
-    project_name = '造粒机混剪'
-    output_folder = 'output\\造粒机混剪\\0813'
+    # 总参数设置
+    project_name = '赫学熊直播预告'
+    output_folder = 'output\\赫学熊\\0829'
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    #输入文件夹，按类型分好
-    folder_path_list = ['input/造粒机/07-31/01/',
-                        'input/造粒机/07-31/02/',
-                        'input/造粒机/07-31/03/']
+    # 输入文件夹，按类型分好
+    folder_path_list = ['input/赫学熊/2024-08-29 仓库']
 
-    #每个文件夹选几个视频
-    number_of_video_01 = 1
-    number_of_video_02 = 8
-    number_of_video_03 = 1
+    # 每个文件夹选几个视频
+    number_of_video_01 = 8
+    # number_of_video_02 = 8
+    # number_of_video_03 = 1
 
-    #每个片段截取多少秒
+    # 每个片段截取多少秒
     clip_duration = 3
-    clip_duration_01 = 2
-    clip_duration_02 = 3
-    clip_duration_03 = 2
+    clip_duration_01 = 3
+    # clip_duration_02 = 3
+    # clip_duration_03 = 2
 
-    #片段截取
+    # 片段截取
     print(f'片段1 素材开始拼接')
     clip_01 = create_video_montage(folder_path_list[0], number_of_video_01, clip_duration_01, with_audio=False)
     print(f'片段1 素材拼接完毕')
-    print(f'片段2 素材开始拼接')
-    clip_02 = create_video_montage(folder_path_list[1], number_of_video_02, clip_duration_02, with_audio=False)
-    print(f'片段2 素材拼接完毕')
-    print(f'片段3 素材开始拼接')
-    clip_03 = create_video_montage(folder_path_list[2], number_of_video_03, clip_duration_03, with_audio=False)
-    print(f'片段3 素材拼接完毕')
+    # print(f'片段2 素材开始拼接')
+    # clip_02 = create_video_montage(folder_path_list[1], number_of_video_02, clip_duration_02, with_audio=False)
+    # print(f'片段2 素材拼接完毕')
+    # print(f'片段3 素材开始拼接')
+    # clip_03 = create_video_montage(folder_path_list[2], number_of_video_03, clip_duration_03, with_audio=False)
+    # print(f'片段3 素材拼接完毕')
 
-    #拼合片段列表
+    # 拼合片段列表
     print(f'剪辑素材合并')
-    clips = clip_01 + clip_02 + clip_03
+    # clips = clip_01 + clip_02 + clip_03
+    clips = clip_01
     # clips = clip_01 + clip_02
 
-    #合并片段，生成视频
+    # 合并片段，生成视频
     print(f'剪辑生成')
     video_name = generate_datetime_string(project_name)
     print(f'【视频名称】：{video_name}')
     output_file = f'{os.path.join(output_folder, video_name)}.mp4'
     print(f'【视频文件名】：{output_file}')
-    print(f'{"-"*50}视频渲染开始{"-"*50}')
+    print(f'{"-" * 50}视频渲染开始{"-" * 50}')
     video_generator(clips, output_file, with_audio=False)
     print(f'{"-" * 50}{video_name}生成完毕{"-" * 50}')
+
 
 def multiple_video_voice_bgm_generation(project_name,
                                         output_folder,
@@ -175,7 +182,7 @@ def multiple_video_voice_bgm_generation(project_name,
                                         clip_size,
                                         fps,
                                         voice_speed):
-    #检查输出文件夹
+    # 检查输出文件夹
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
@@ -187,7 +194,7 @@ def multiple_video_voice_bgm_generation(project_name,
     print(bgm_file)
     bgm_file_path = os.path.join(root_dir, bgm_folder_path, bgm_file)
 
-    #配音和BGM进行混音
+    # 配音和BGM进行混音
     audio_clip = AudioFileClip(voice_filename).volumex(audio_volumex)
     bgm_clip = AudioFileClip(bgm_file_path).volumex(bgm_volumex)
     # bgm_clip = afx.audio_loop(bgm_clip, duration=audio_clip.duration)
@@ -197,12 +204,12 @@ def multiple_video_voice_bgm_generation(project_name,
     # final_clip_duration = audio_clip.duration
 
     all_clips_number = sum(number_of_video_list)
-    one_clip_duration = round((audio_clip.duration+2)/all_clips_number, 1)
+    one_clip_duration = round((audio_clip.duration + 1) / all_clips_number, 1)
     print(all_clips_number)
     print(audio_clip.duration)
     print(one_clip_duration)
 
-    #片段混剪
+    # 片段混剪
     clips_list = []
     for index, folder_path in enumerate(folder_path_list):
         print(folder_path)
@@ -229,22 +236,23 @@ def multiple_video_voice_bgm_generation(project_name,
         composite_audio = CompositeAudioClip([audio_clip, bgm_clip])
         final_clip = final_clip.set_audio(composite_audio)
         final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="h264_nvenc", bitrate="20000k", fps=fps, audio_bitrate="320k")
+        # final_clip.write_videofile(output_file, audio_codec=None, codec="h264_nvenc", bitrate="20000k", fps=fps, audio_bitrate="320k")
     else:
         print('音频长度不够')
 
     final_clip.close()
     del final_clip
 
-    #片段截取
+    # 片段截取
     # clip_01 = create_video_montage(folder_path_list[0], number_of_video_01, clip_duration_01, with_audio=False)
 
-
-    #合并片段，生成视频
+    # 合并片段，生成视频
     # video_name = generate_datetime_string(project_name)
     # print(video_name)
     # output_file = f'{os.path.join(output_folder, video_name)}.mp4'
     # print(output_file)
     # video_generator(clips, output_file, with_audio=False)
+
 
 def main():
     project_name = '图书_女孩你该如何保护自己'
@@ -268,14 +276,14 @@ def main():
     folder_path_list = ['input/2024.4.1男孩女孩你该如何保护自己2/音频+素材2/素材/开头结尾',
                         'input/2024.4.1男孩女孩你该如何保护自己2/音频+素材2/素材/标题集',
                         'input/2024.4.1男孩女孩你该如何保护自己2/音频+素材2/素材/翻书',
-                        'input/2024.4.1男孩女孩你该如何保护自己2/音频+素材2/素材/合书',]
+                        'input/2024.4.1男孩女孩你该如何保护自己2/音频+素材2/素材/合书', ]
     number_of_video_dict = {'number_of_video_1': 1,
                             'number_of_video_2': 1,
                             'number_of_video_3': 5,
                             'number_of_video_4': 1,
                             'number_of_video_5': 1}
-    number_of_video_list = [1, 1, 6, 1,]
-    generated_quantity = 50
+    number_of_video_list = [1, 1, 6, 1, ]
+    generated_quantity = 1
     for i in range(generated_quantity):
         # multiple_video_generation()
         multiple_video_voice_bgm_generation(project_name=project_name,
@@ -291,7 +299,6 @@ def main():
                                             clip_size=clip_size,
                                             fps=fps,
                                             voice_speed=voice_speed)
-
 
 def main2():
     audio_volumex = 3
@@ -311,6 +318,11 @@ def main2():
     final_clip_duration = audio_clip.duration
     print(final_clip_duration)
 
+def main3():
+    generated_quantity = 5
+    for i in range(generated_quantity):
+        multiple_video_generation()
+
 
 if __name__ == '__main__':
-    main()
+    main3()

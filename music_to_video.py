@@ -60,9 +60,9 @@ def add_music_to_videos(video_folder, music_folder, output_folder):
 
 
 def main():
-    video_folder_path = "output\\造粒机混剪\\0731\\text_to_video"
-    music_folder_path = "BGM"
-    output_folder_path = "output\\造粒机混剪\\0731\\music_to_video"
+    video_folder_path = "output\\赫学熊\\0829\\text_to_video"
+    music_folder_path = "BGM/谢胖子"
+    output_folder_path = "output\\赫学熊\\0829\\music_to_video"
     if not os.path.exists(output_folder_path):
         os.makedirs(output_folder_path)
     add_music_to_videos(video_folder_path, music_folder_path, output_folder_path)
