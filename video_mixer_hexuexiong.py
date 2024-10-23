@@ -101,7 +101,7 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_file, wi
     print('获取配音时长')
     voice_duration = AudioFileClip(voice_file).duration
     print(f'【配音时长】：{voice_duration}')
-    clip_duration = voice_duration
+    # clip_duration = voice_duration
 
 
     # 从指定文件夹获取所有视频文件
@@ -117,6 +117,7 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_file, wi
 
     if number_of_videos == 1:
         print(f'{"-"*50}执行单文件模式{"-"*50}')
+        clip_duration = voice_duration
         # 存储片段的列表
         selected_videos = random.sample(video_files, number_of_videos)
         video = selected_videos[0]
@@ -160,6 +161,52 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_file, wi
         # video_clip.close()
     else:
         print(f'{"-" * 50}执行多片段模式{"-" * 50}')
+        # 存储片段的列表
+        selected_videos = random.sample(video_files, number_of_videos)
+        # 计算每个分片段的长度
+        clip_duration = voice_duration / number_of_videos
+        subclips = []
+        for video in selected_videos:
+            # 加载视频文件
+            print(f'加载视频文件:{video}')
+            video_clip = VideoFileClip(video)
+            # video_clip = video_clip.resize((1080, 1920))
+            print(f'视频分辨率：{video_clip.size}')
+
+            # 随机选择片段的开始时间
+            print('随机选择片段的开始时间')
+            # number = clip_duration
+            # random_clip_duration = generate_random_float(number, 0.5)
+            print(f'clip_duration：{clip_duration}')
+            max_start_time = max(0, video_clip.duration - clip_duration)
+            start_time = random.uniform(0, max_start_time)
+
+            # 创建指定长度的子片段
+            print('创建指定长度的子片段')
+            subclip = video_clip.subclip(start_time, start_time + clip_duration + 0.1)
+            # 加入子片段列表
+            subclips.append(subclip)
+        # 添加配音
+        print(f'添加配音：{voice_file}')
+        # audio_clip = AudioFileClip(voice_file).write_audiofile(f'output/test_{voice_file[-10:]}.mp3')
+        audio_clip = AudioFileClip(voice_file)
+        # 合并剪辑
+        subclip_all = concatenate_videoclips(subclips)
+        # 去除源音频
+        subclip_all = subclip_all.without_audio()
+        # 加入配音
+        subclip_all = subclip_all.set_audio(audio_clip)
+        # audio_clip.write_audiofile(f'output/test_{voice_file[-10:]}.mp3')
+        print(f'音频时长{audio_clip.duration}')
+        print(f'视频时长{subclip_all.duration}')
+
+        # 将子片段添加到片段列表中
+        # subclip_all.write_videofile(f'output/test_{voice_file[-10:]}.mp4', audio_codec="libmp3lame", codec="libx264", bitrate="25000k", fps=60, audio_bitrate="320k", threads=28, audio=True)
+        print('将子片段添加到片段列表中')
+        clips.append(subclip_all)
+        # subclip.close()
+        # video_clip.close()
+        # video_clip.close()
 
     # 随机打乱片段列表
     # print(clips)
@@ -405,7 +452,7 @@ def hexuexiong_multiple_video(project_name,
     composite_audio = CompositeAudioClip([audio_clip, bgm_clip])
     final_clip = final_clip.set_audio(composite_audio)
 
-    final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="libx264", bitrate="25000k", fps=fps, audio_bitrate="320k", threads=8)
+    final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="libx264", bitrate="25000k", fps=fps, audio_bitrate="320k", threads=64)
     # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="h264_nvenc", bitrate="25000k", fps=fps, audio_bitrate="320k", threads=8)
 
     final_clip.close()
@@ -414,8 +461,8 @@ def hexuexiong_multiple_video(project_name,
 
 def main():
     project_name = '赫学熊混剪_秋季长袖'
-    output_folder = 'output\\赫学熊混剪\\秋季长袖\\1022'
-    bgm_folder_path = 'BGM/好物分享'
+    output_folder = 'output\\赫学熊混剪\\秋季长袖\\1023'
+    bgm_folder_path = 'BGM/赫学熊'
     voice_folder_path = 'input/赫学熊/秋季长袖/2024_10_20/Audio'
     audio_volumex = 3
     bgm_volumex = 0.6
@@ -460,8 +507,8 @@ def main():
                             'number_of_video_6': 1,
                             'number_of_video_7': 1,
                             'number_of_video_8': 1}
-    number_of_video_list = [1, 1, 1, 1, 1, 1, 1, 1]
-    generated_quantity = 1
+    number_of_video_list = [1, 1, 2, 2, 2, 2, 1, 1]
+    generated_quantity = 5
     for i in range(generated_quantity):
         # multiple_video_generation()
         hexuexiong_multiple_video(project_name=project_name,
