@@ -452,8 +452,8 @@ def hexuexiong_multiple_video(project_name,
     composite_audio = CompositeAudioClip([audio_clip, bgm_clip])
     final_clip = final_clip.set_audio(composite_audio)
 
-    final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="libx264", bitrate="25000k", fps=fps, audio_bitrate="320k", threads=64)
-    # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="h264_nvenc", bitrate="25000k", fps=fps, audio_bitrate="320k", threads=8)
+    # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="libx264", bitrate="25000k", fps=fps, audio_bitrate="320k", threads=64)
+    final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="h264_nvenc", bitrate="16000k", fps=fps, audio_bitrate="320k", threads=8)
 
     final_clip.close()
     del final_clip
@@ -461,9 +461,10 @@ def hexuexiong_multiple_video(project_name,
 
 def main():
     project_name = '赫学熊混剪_秋季长袖'
-    output_folder = 'output\\赫学熊混剪\\秋季长袖\\1023'
+    output_folder = 'output\\赫学熊混剪\\秋季长袖\\1026'
     bgm_folder_path = 'BGM/赫学熊'
-    voice_folder_path = 'input/赫学熊/秋季长袖/2024_10_20/Audio'
+    voice_folder_path = 'input/赫学熊/秋季长袖/2024_10_20/Audio/01'
+    video_folder_path = 'input/赫学熊/秋季长袖/2024_10_20/Video'
     audio_volumex = 3
     bgm_volumex = 0.6
     clip_size = [1080, 1920]
@@ -479,16 +480,18 @@ def main():
     speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Riff44100Hz16BitMonoPcm)
 
     # 输入文件夹，按类型分好
-    folder_path_list = ['input/赫学熊/秋季长袖/2024_10_20/秋季长袖_01_开头',
-                        'input/赫学熊/秋季长袖/2024_10_20/秋季长袖_02_中间_寒暄',
-                        'input/赫学熊/秋季长袖/2024_10_20/秋季长袖_03_中间_面料',
-                        'input/赫学熊/秋季长袖/2024_10_20/秋季长袖_04_中间_衣领',
-                        'input/赫学熊/秋季长袖/2024_10_20/秋季长袖_05_中间_反光条_1',
-                        'input/赫学熊/秋季长袖/2024_10_20/秋季长袖_05_中间_反光条_2',
-                        'input/赫学熊/秋季长袖/2024_10_20/秋季长袖_06_中间_透气性',
-                        'input/赫学熊/秋季长袖/2024_10_20/秋季长袖_07_结尾']
+    # folder_path_list = ['input/赫学熊/秋季长袖/2024_10_20/秋季长袖_01_开头',
+    #                     'input/赫学熊/秋季长袖/2024_10_20/秋季长袖_02_中间_寒暄',
+    #                     'input/赫学熊/秋季长袖/2024_10_20/秋季长袖_03_中间_面料',
+    #                     'input/赫学熊/秋季长袖/2024_10_20/秋季长袖_04_中间_衣领',
+    #                     'input/赫学熊/秋季长袖/2024_10_20/秋季长袖_05_中间_反光条_1',
+    #                     'input/赫学熊/秋季长袖/2024_10_20/秋季长袖_05_中间_反光条_2',
+    #                     'input/赫学熊/秋季长袖/2024_10_20/秋季长袖_06_中间_透气性',
+    #                     'input/赫学熊/秋季长袖/2024_10_20/秋季长袖_07_结尾']
+
+    folder_path_list = utils.get_sorted_absolute_subdirectories(video_folder_path)
     # voice_path_list = [f for f in os.listdir(voice_folder_path) if f.lower().endswith((".mp3", ".wav"))]
-    voice_path_list = [os.path.join(voice_folder_path, f) for f in os.listdir(voice_folder_path) if f.endswith(('.MP3', '.wav'))]
+    voice_path_list = [os.path.join(voice_folder_path, f) for f in os.listdir(voice_folder_path) if f.lower().endswith(('.mp3', '.wav'))]
     print(voice_path_list)
     # voice_path_list = ['input/赫学熊/秋季长袖/2024_10_20/Audio/秋季长袖_01_开头.MP3',
     #                     'input/赫学熊/秋季长袖/2024_10_20/Audio/秋季长袖_02_中间_寒暄.MP3',

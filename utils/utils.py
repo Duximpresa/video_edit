@@ -36,8 +36,26 @@ def generate_datetime_string(prefix=None):
     else:
         return f"{datetime_string}"
 
-
+# 生成哈希码
 def generate_hash_code(text):
     text = text.encode('utf-8')
     hash_code = hashlib.sha256(text).hexdigest()
     return hash_code
+
+# 获取文件夹下的所有子文件夹的相对路径
+def get_sorted_absolute_subdirectories(path):
+    subdirs = []
+    for root, dirs, _ in os.walk(path):
+        for d in dirs:
+            abs_dir = os.path.join(root, d)
+            subdirs.append(abs_dir)
+    subdirs.sort()
+    return subdirs
+
+def main():
+    path = r'D:\DuximpresaProject\Github\video_edit\input\赫学熊\秋季长袖\2024_10_20\Video'
+    for i in get_sorted_absolute_subdirectories(path):
+        print(i)
+
+if __name__ == "__main__":
+    main()
