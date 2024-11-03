@@ -11,8 +11,18 @@ import azure.cognitiveservices.speech as speechsdk
 # from moviepy.video import fx
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import Process
+import psutil
 
 root_dir = utils.root_dir()
+
+
+def kill_ffmpeg_processes():
+    for proc in psutil.process_iter():
+        try:
+            if 'ffmpeg' in proc.name().lower():
+                proc.kill()
+        except psutil.NoSuchProcess:
+            pass
 
 
 def random_clip(video_path, clip_duration, output_path):
@@ -95,6 +105,8 @@ def create_video_montage(folder_path, number_of_videos, clip_duration, with_audi
     random.shuffle(clips)
     print('返回剪辑')
     return clips
+
+
 def create_video_and_voice_montage(folder_path, number_of_videos, voice_file, with_audio=True):
     # 获取配音长度
 
@@ -102,7 +114,6 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_file, wi
     voice_duration = AudioFileClip(voice_file).duration
     print(f'【配音时长】：{voice_duration}')
     # clip_duration = voice_duration
-
 
     # 从指定文件夹获取所有视频文件
     video_files = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if
@@ -116,7 +127,8 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_file, wi
     clips = []
 
     if number_of_videos == 1:
-        print(f'{"-"*50}执行单文件模式{"-"*50}')
+        print(f'{"-" * 50}执行单文件模式{"-" * 50}')
+        subclips = []
         clip_duration = voice_duration
         # 存储片段的列表
         selected_videos = random.sample(video_files, number_of_videos)
@@ -137,7 +149,7 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_file, wi
 
         # 创建指定长度的子片段
         print('创建指定长度的子片段')
-        subclip = video_clip.subclip(start_time, start_time + clip_duration + 0.2)
+        subclip = video_clip.subclip(start_time, start_time + clip_duration + 0.1)
         # 添加配音
         print(f'添加配音：{voice_file}')
         # audio_clip = AudioFileClip(voice_file).write_audiofile(f'output/test_{voice_file[-10:]}.mp3')
@@ -155,7 +167,22 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_file, wi
         # 将子片段添加到片段列表中
         # subclip.write_videofile(f'output/test_{voice_file[-10:]}.mp4', audio_codec="libmp3lame", codec="libx264", bitrate="25000k", fps=60, audio_bitrate="320k", threads=28, audio=True)
         print('将子片段添加到片段列表中')
-        clips.append(subclip)
+        subclips.append(subclip)
+        subclip_all = concatenate_videoclips(subclips)
+        clips.append(subclip_all)
+        testname = f'output/{os.path.basename(voice_file).split('.')[0]}.mp4'
+        print(testname)
+        # subclip.write_videofile(testname, audio_codec="libmp3lame", codec="libx264", bitrate="25000k", fps=60, audio_bitrate="320k", threads=28, audio=True)
+        # subclip_all.write_videofile(testname, audio_codec="libmp3lame", codec="libx264", bitrate="25000k", fps=60, audio_bitrate="320k", threads=28, audio=True)
+
+
+
+        # clips.append(subclip)
+        # subclip.close()
+        # subclip_all.close()
+        # del subclip
+        # del subclip_all
+        # kill_ffmpeg_processes()
         # subclip.close()
         # video_clip.close()
         # video_clip.close()
@@ -186,6 +213,9 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_file, wi
             subclip = video_clip.subclip(start_time, start_time + clip_duration + 0.1)
             # 加入子片段列表
             subclips.append(subclip)
+            subclip.close()
+            del subclip
+            # kill_ffmpeg_processes()
         # 添加配音
         print(f'添加配音：{voice_file}')
         # audio_clip = AudioFileClip(voice_file).write_audiofile(f'output/test_{voice_file[-10:]}.mp3')
@@ -360,7 +390,8 @@ def multiple_video_voice_bgm_generation(project_name,
         bgm_clip = bgm_clip.set_start(0)
         composite_audio = CompositeAudioClip([audio_clip, bgm_clip])
         final_clip = final_clip.set_audio(composite_audio)
-        final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="h264_nvenc", bitrate="20000k", fps=fps, audio_bitrate="320k")
+        final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="h264_nvenc", bitrate="20000k", fps=fps,
+                                   audio_bitrate="320k")
         # final_clip.write_videofile(output_file, audio_codec=None, codec="h264_nvenc", bitrate="20000k", fps=fps, audio_bitrate="320k")
     else:
         print('音频长度不够')
@@ -378,21 +409,21 @@ def multiple_video_voice_bgm_generation(project_name,
     # print(output_file)
     # video_generator(clips, output_file, with_audio=False)
 
-def hexuexiong_multiple_video(project_name,
-                                        output_folder,
-                                        folder_path_list,
-                                        number_of_video_list,
-                                        voice_txt_file,
-                                        voice_name,
-                                        speech_config,
-                                        bgm_folder_path,
-                                        audio_volumex,
-                                        bgm_volumex,
-                                        clip_size,
-                                        fps,
-                                        voice_speed,
-                                        voice_path_list):
 
+def hexuexiong_multiple_video(project_name,
+                              output_folder,
+                              folder_path_list,
+                              number_of_video_list,
+                              voice_txt_file,
+                              voice_name,
+                              speech_config,
+                              bgm_folder_path,
+                              audio_volumex,
+                              bgm_volumex,
+                              clip_size,
+                              fps,
+                              voice_speed,
+                              voice_path_list):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
@@ -406,7 +437,6 @@ def hexuexiong_multiple_video(project_name,
     # 配音和BGM进行混音
     # audio_clip = AudioFileClip(voice_filename).volumex(audio_volumex)
     # bgm_clip = AudioFileClip(bgm_file_path).volumex(bgm_volumex)
-
 
     # 片段混剪
     clips_list = []
@@ -427,6 +457,8 @@ def hexuexiong_multiple_video(project_name,
         print(clips_list)
         print(len(clips_list))
     clips = [j for i in clips_list for j in i]
+    for a in clips:
+        print(a)
     final_clip_name = generate_datetime_string(project_name)
     print(final_clip_name)
     output_file = f'{os.path.join(output_folder, final_clip_name)}.mp4'
@@ -441,6 +473,10 @@ def hexuexiong_multiple_video(project_name,
     # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="h264_nvenc", bitrate="20000k", fps=fps,audio_bitrate="320k")
 
     audio_clip = final_clip.audio.volumex(audio_volumex)
+    # audio_clip = final_clip.audio
+    print(audio_clip.duration)
+    print(final_clip.duration)
+    # audio_clip.write_audiofile(f'output/test_测试.mp3')
 
     # audio_clip = AudioFileClip(final_clip).volumex(audio_volumex)
     bgm_clip = AudioFileClip(bgm_file_path).volumex(bgm_volumex)
@@ -448,25 +484,26 @@ def hexuexiong_multiple_video(project_name,
     bgm_clip = afx.audio_loop(bgm_clip, duration=final_clip_duration)
     bgm_clip = bgm_clip.set_start(0)
 
-
     composite_audio = CompositeAudioClip([audio_clip, bgm_clip])
     final_clip = final_clip.set_audio(composite_audio)
+    print(final_clip)
 
-    # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="libx264", bitrate="25000k", fps=fps, audio_bitrate="320k", threads=64)
+    # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="libx264", bitrate="1600k", fps=fps, audio_bitrate="320k", threads=64)
     final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="h264_nvenc", bitrate="16000k", fps=fps, audio_bitrate="320k", threads=8)
 
     final_clip.close()
     del final_clip
+    kill_ffmpeg_processes()
 
 
 def main():
-    project_name = '赫学熊混剪_秋季长袖'
-    output_folder = 'output\\赫学熊混剪\\秋季长袖\\1026'
+    project_name = '赫学熊混剪_秋防寒服'
+    output_folder = 'output\\赫学熊混剪\\防寒服\\1102'
     bgm_folder_path = 'BGM/赫学熊'
-    voice_folder_path = 'input/赫学熊/秋季长袖/2024_10_20/Audio/01'
-    video_folder_path = 'input/赫学熊/秋季长袖/2024_10_20/Video'
-    audio_volumex = 3
-    bgm_volumex = 0.6
+    voice_folder_path = 'input/赫学熊/防寒服/2024-_11_02/audio/01'
+    video_folder_path = 'input/赫学熊/防寒服/2024-_11_02/video'
+    audio_volumex = 2.5
+    bgm_volumex = 0.4
     clip_size = [1080, 1920]
     fps = 60
     voice_speed = '20%'
@@ -491,7 +528,8 @@ def main():
 
     folder_path_list = utils.get_sorted_absolute_subdirectories(video_folder_path)
     # voice_path_list = [f for f in os.listdir(voice_folder_path) if f.lower().endswith((".mp3", ".wav"))]
-    voice_path_list = [os.path.join(voice_folder_path, f) for f in os.listdir(voice_folder_path) if f.lower().endswith(('.mp3', '.wav'))]
+    voice_path_list = [os.path.join(voice_folder_path, f) for f in os.listdir(voice_folder_path) if
+                       f.lower().endswith(('.mp3', '.wav'))]
     print(voice_path_list)
     # voice_path_list = ['input/赫学熊/秋季长袖/2024_10_20/Audio/秋季长袖_01_开头.MP3',
     #                     'input/赫学熊/秋季长袖/2024_10_20/Audio/秋季长袖_02_中间_寒暄.MP3',
@@ -510,27 +548,36 @@ def main():
                             'number_of_video_6': 1,
                             'number_of_video_7': 1,
                             'number_of_video_8': 1}
-    number_of_video_list = [1, 1, 2, 2, 2, 2, 1, 1]
-    generated_quantity = 5
+    # number_of_video_list = [1, 1, 2, 2, 2, 2, 1, 1]
+    number_of_video_list = [1,
+                            2,
+                            2,
+                            2,
+                            2,
+                            2,
+                            1]
+    generated_quantity = 50
     for i in range(generated_quantity):
         # multiple_video_generation()
         hexuexiong_multiple_video(project_name=project_name,
-                                            output_folder=output_folder,
-                                            folder_path_list=folder_path_list,
-                                            number_of_video_list=number_of_video_list,
-                                            voice_txt_file=voice_txt_file,
-                                            voice_name=voice_name,
-                                            speech_config=speech_config,
-                                            bgm_folder_path=bgm_folder_path,
-                                            audio_volumex=audio_volumex,
-                                            bgm_volumex=bgm_volumex,
-                                            clip_size=clip_size,
-                                            fps=fps,
-                                            voice_speed=voice_speed,
-                                            voice_path_list=voice_path_list)
+                                  output_folder=output_folder,
+                                  folder_path_list=folder_path_list,
+                                  number_of_video_list=number_of_video_list,
+                                  voice_txt_file=voice_txt_file,
+                                  voice_name=voice_name,
+                                  speech_config=speech_config,
+                                  bgm_folder_path=bgm_folder_path,
+                                  audio_volumex=audio_volumex,
+                                  bgm_volumex=bgm_volumex,
+                                  clip_size=clip_size,
+                                  fps=fps,
+                                  voice_speed=voice_speed,
+                                  voice_path_list=voice_path_list)
+        # kill_ffmpeg_processes()
+
 
 def main2():
-    audio_volumex = 3
+    audio_volumex = 2
     bgm_volumex = 0.2
 
     bgm_folder_path = 'BGM'
@@ -546,6 +593,7 @@ def main2():
     # composite_audio.write_audiofile('test.mp3', codec='libmp3lame', fps=audio_clip.fps)
     final_clip_duration = audio_clip.duration
     print(final_clip_duration)
+
 
 def main3():
     generated_quantity = 5
