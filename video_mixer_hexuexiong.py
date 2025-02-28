@@ -12,6 +12,7 @@ import azure.cognitiveservices.speech as speechsdk
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import Process
 import psutil
+import json
 
 root_dir = utils.root_dir()
 
@@ -488,8 +489,8 @@ def hexuexiong_multiple_video(project_name,
     final_clip = final_clip.set_audio(composite_audio)
     print(final_clip)
 
-    # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="libx264", bitrate="1600k", fps=fps, audio_bitrate="320k", threads=64)
-    final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="h264_nvenc", bitrate="16000k", fps=fps, audio_bitrate="320k", threads=8)
+    # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="libx264", bitrate="10000k", fps=fps, audio_bitrate="320k", threads=64)
+    final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="h264_nvenc", bitrate="18000k", fps=fps, audio_bitrate="320k", threads=64)
 
     final_clip.close()
     del final_clip
@@ -497,11 +498,114 @@ def hexuexiong_multiple_video(project_name,
 
 
 def main():
-    project_name = '赫学熊混剪_秋防寒服'
-    output_folder = 'output\\赫学熊混剪\\防寒服\\1102'
+    project_name = '赫学熊混剪_防寒服'
+    output_folder = 'output\\赫学熊混剪\\防寒服\\0220'
     bgm_folder_path = 'BGM/赫学熊'
     voice_folder_path = 'input/赫学熊/防寒服/2024-_11_02/audio/01'
     video_folder_path = 'input/赫学熊/防寒服/2024-_11_02/video'
+    audio_volumex = 2.5
+    bgm_volumex = 0.4
+    clip_size = [1080, 1920]
+    fps = 60
+    voice_speed = '20%'
+
+    # 配音部分参数
+    voice_txt_file = f'{root_dir}/input/Voice_Text/摆地摊.txt'
+    voice_name = "zh-CN-XiaoxiaoMultilingualNeural"
+    speech_key = "8b7335e4c1cf4708a48453f878a6c802"
+    service_region = "southeastasia"
+    speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=service_region)
+    speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Riff44100Hz16BitMonoPcm)
+
+    # 输入文件夹，按类型分好
+    # folder_path_list = ['input/赫学熊/秋季长袖/2024_10_20/秋季长袖_01_开头',
+    #                     'input/赫学熊/秋季长袖/2024_10_20/秋季长袖_02_中间_寒暄',
+    #                     'input/赫学熊/秋季长袖/2024_10_20/秋季长袖_03_中间_面料',
+    #                     'input/赫学熊/秋季长袖/2024_10_20/秋季长袖_04_中间_衣领',
+    #                     'input/赫学熊/秋季长袖/2024_10_20/秋季长袖_05_中间_反光条_1',
+    #                     'input/赫学熊/秋季长袖/2024_10_20/秋季长袖_05_中间_反光条_2',
+    #                     'input/赫学熊/秋季长袖/2024_10_20/秋季长袖_06_中间_透气性',
+    #                     'input/赫学熊/秋季长袖/2024_10_20/秋季长袖_07_结尾']
+
+    folder_path_list = utils.get_sorted_absolute_subdirectories(video_folder_path)
+    # voice_path_list = [f for f in os.listdir(voice_folder_path) if f.lower().endswith((".mp3", ".wav"))]
+    voice_path_list = [os.path.join(voice_folder_path, f) for f in os.listdir(voice_folder_path) if
+                       f.lower().endswith(('.mp3', '.wav'))]
+    print(voice_path_list)
+    # voice_path_list = ['input/赫学熊/秋季长袖/2024_10_20/Audio/秋季长袖_01_开头.MP3',
+    #                     'input/赫学熊/秋季长袖/2024_10_20/Audio/秋季长袖_02_中间_寒暄.MP3',
+    #                     'input/赫学熊/秋季长袖/2024_10_20/Audio/秋季长袖_03_中间_面料.MP3',
+    #                     'input/赫学熊/秋季长袖/2024_10_20/Audio/秋季长袖_04_中间_衣领.MP3',
+    #                    'input/赫学熊/秋季长袖/2024_10_20/Audio/秋季长袖_05_中间_反光条_1.MP3',
+    #                    'input/赫学熊/秋季长袖/2024_10_20/Audio/秋季长袖_05_中间_反光条_2.MP3',
+    #                    'input/赫学熊/秋季长袖/2024_10_20/Audio/秋季长袖_06_中间_透气性.MP3',
+    #                    'input/赫学熊/秋季长袖/2024_10_20/Audio/秋季长袖_07_结尾.MP3']
+
+    number_of_video_dict = {'number_of_video_1': 1,
+                            'number_of_video_2': 1,
+                            'number_of_video_3': 1,
+                            'number_of_video_4': 1,
+                            'number_of_video_5': 1,
+                            'number_of_video_6': 1,}
+
+    # number_of_video_list = [1, 1, 2, 2, 2, 2, 1, 1]
+    number_of_video_list = [1,
+                            2,
+                            2,
+                            2,
+                            2,
+                            2,
+                            1]
+    generated_quantity = 6
+    for i in range(generated_quantity):
+        # multiple_video_generation()
+        hexuexiong_multiple_video(project_name=project_name,
+                                  output_folder=output_folder,
+                                  folder_path_list=folder_path_list,
+                                  number_of_video_list=number_of_video_list,
+                                  voice_txt_file=voice_txt_file,
+                                  voice_name=voice_name,
+                                  speech_config=speech_config,
+                                  bgm_folder_path=bgm_folder_path,
+                                  audio_volumex=audio_volumex,
+                                  bgm_volumex=bgm_volumex,
+                                  clip_size=clip_size,
+                                  fps=fps,
+                                  voice_speed=voice_speed,
+                                  voice_path_list=voice_path_list)
+        # kill_ffmpeg_processes()
+
+
+def main2():
+    audio_volumex = 2
+    bgm_volumex = 0.2
+
+    bgm_folder_path = 'BGM'
+    bgm_file = get_bgm_list_choice(bgm_folder_path)
+    print(bgm_file)
+    bgm_file_path = os.path.join(root_dir, bgm_folder_path, bgm_file)
+    voice_filename = 'storage/Voices/测试项目_fabdf1707ce6133379d73e94ba529f52650ba0378fdaed2b6eb0e8cefde052b7.wav'
+    audio_clip = AudioFileClip(voice_filename).volumex(audio_volumex)
+    bgm_clip = AudioFileClip(bgm_file_path).volumex(bgm_volumex)
+    bgm_clip = afx.audio_loop(bgm_clip, duration=audio_clip.duration)
+    bgm_clip = bgm_clip.set_start(0)
+    # composite_audio = CompositeAudioClip([audio_clip, bgm_clip])
+    # composite_audio.write_audiofile('test.mp3', codec='libmp3lame', fps=audio_clip.fps)
+    final_clip_duration = audio_clip.duration
+    print(final_clip_duration)
+
+
+def main3():
+    generated_quantity = 5
+    for i in range(generated_quantity):
+        multiple_video_generation()
+
+def main4():
+    project_name = '赫学熊混剪_秋季长袖'
+    output_folder = 'output\\赫学熊混剪\\秋季长袖\\0207'
+    bgm_folder_path = 'BGM/赫学熊'
+    voice_folder_path = 'input/赫学熊/秋季长袖/2024_10_20/Audio/01'
+    video_folder_path = 'input/赫学熊/秋季长袖/2024_10_20/Video'
     audio_volumex = 2.5
     bgm_volumex = 0.4
     clip_size = [1080, 1920]
@@ -555,51 +659,50 @@ def main():
                             2,
                             2,
                             2,
+                            2,
                             1]
-    generated_quantity = 50
-    for i in range(generated_quantity):
-        # multiple_video_generation()
-        hexuexiong_multiple_video(project_name=project_name,
-                                  output_folder=output_folder,
-                                  folder_path_list=folder_path_list,
-                                  number_of_video_list=number_of_video_list,
-                                  voice_txt_file=voice_txt_file,
-                                  voice_name=voice_name,
-                                  speech_config=speech_config,
-                                  bgm_folder_path=bgm_folder_path,
-                                  audio_volumex=audio_volumex,
-                                  bgm_volumex=bgm_volumex,
-                                  clip_size=clip_size,
-                                  fps=fps,
-                                  voice_speed=voice_speed,
-                                  voice_path_list=voice_path_list)
-        # kill_ffmpeg_processes()
 
+    config_file_dir = 'config'
+    config_file_list = utils.find_files_by_extensions(config_file_dir, extensions=['.json'])
+    for config_file in config_file_list:
+        with open(config_file, "r", encoding="utf-8") as f:
+            config = json.load(f)
 
-def main2():
-    audio_volumex = 2
-    bgm_volumex = 0.2
+        project_name = config["project_name"]
+        output_folder = config["output_folder"]
+        bgm_folder_path = config["bgm_folder_path"]
+        voice_folder_path = config["voice_folder_path"]
+        video_folder_path = config["video_folder_path"]
+        audio_volumex = config["audio_volumex"]
+        bgm_volumex = config["bgm_volumex"]
+        clip_size = config["clip_size"]
+        fps = config["fps"]
+        voice_speed = config["voice_speed"]
+        voice_txt_file = config["voice_config"]["voice_txt_file"]
+        voice_name = config["voice_config"]["voice_name"]
+        speech_key = config["voice_config"]["speech_key"]
+        service_region = config["voice_config"]["service_region"]
+        number_of_video_list = config["number_of_video_list"]
+        generated_quantity = config["generated_quantity"]
 
-    bgm_folder_path = 'BGM'
-    bgm_file = get_bgm_list_choice(bgm_folder_path)
-    print(bgm_file)
-    bgm_file_path = os.path.join(root_dir, bgm_folder_path, bgm_file)
-    voice_filename = 'storage/Voices/测试项目_fabdf1707ce6133379d73e94ba529f52650ba0378fdaed2b6eb0e8cefde052b7.wav'
-    audio_clip = AudioFileClip(voice_filename).volumex(audio_volumex)
-    bgm_clip = AudioFileClip(bgm_file_path).volumex(bgm_volumex)
-    bgm_clip = afx.audio_loop(bgm_clip, duration=audio_clip.duration)
-    bgm_clip = bgm_clip.set_start(0)
-    # composite_audio = CompositeAudioClip([audio_clip, bgm_clip])
-    # composite_audio.write_audiofile('test.mp3', codec='libmp3lame', fps=audio_clip.fps)
-    final_clip_duration = audio_clip.duration
-    print(final_clip_duration)
-
-
-def main3():
-    generated_quantity = 5
-    for i in range(generated_quantity):
-        multiple_video_generation()
+        generated_quantity = 1
+        for i in range(generated_quantity):
+            # multiple_video_generation()
+            hexuexiong_multiple_video(project_name=project_name,
+                                      output_folder=output_folder,
+                                      folder_path_list=folder_path_list,
+                                      number_of_video_list=number_of_video_list,
+                                      voice_txt_file=voice_txt_file,
+                                      voice_name=voice_name,
+                                      speech_config=speech_config,
+                                      bgm_folder_path=bgm_folder_path,
+                                      audio_volumex=audio_volumex,
+                                      bgm_volumex=bgm_volumex,
+                                      clip_size=clip_size,
+                                      fps=fps,
+                                      voice_speed=voice_speed,
+                                      voice_path_list=voice_path_list)
 
 
 if __name__ == '__main__':
-    main()
+    main4()

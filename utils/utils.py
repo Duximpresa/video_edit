@@ -52,6 +52,38 @@ def get_sorted_absolute_subdirectories(path):
     subdirs.sort()
     return subdirs
 
+def find_files_by_extensions(root_dir, extensions):
+    """
+    扫描指定根目录下的所有文件夹，查找指定后缀名的文件。
+
+    Args:
+        root_dir (str): 根目录路径。
+        extensions (list): 文件后缀名列表，例如 ['.txt', '.pdf', '.jpg']。
+
+    Returns:
+        list: 符合条件的文件路径列表。
+    """
+    found_files = []
+    for root, _, files in os.walk(root_dir):
+        for file in files:
+            if any(file.lower().endswith(ext.lower()) for ext in extensions):
+                found_files.append(os.path.join(root, file))
+    return found_files
+
+# 示例用法
+root_directory = "你的根目录路径"  # 将这里替换为你要扫描的根目录
+file_extensions = [".txt", ".py", ".csv"]  # 指定你要查找的文件后缀名列表
+
+result = find_files_by_extensions(root_directory, file_extensions)
+
+if result:
+    print("找到以下文件：")
+    for file_path in result:
+        print(file_path)
+else:
+    print("未找到符合条件的文件。")
+
+
 def main():
     path = r'D:\DuximpresaProject\Github\video_edit\input\赫学熊\秋季长袖\2024_10_20\Video'
     for i in get_sorted_absolute_subdirectories(path):
