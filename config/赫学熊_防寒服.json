@@ -1,9 +1,9 @@
 {
-    "project_name": "赫学熊混剪_冲锋衣",
-    "output_folder": "output\\赫学熊混剪\\0301\\冲锋衣",
+    "project_name": "赫学熊混剪_防寒服",
+    "output_folder": "output\\赫学熊混剪\\0301\\防寒服",
     "bgm_folder_path": "BGM/赫学熊",
-    "voice_folder_path": "input/赫学熊/冲锋衣/2024_10_24/Audio/01",
-    "video_folder_path": "input/赫学熊/冲锋衣/2024_10_24/Video",
+    "voice_folder_path": "input/赫学熊/防寒服/2024-_11_02/audio/01",
+    "video_folder_path": "input/赫学熊/防寒服/2024-_11_02/video",
     "audio_volumex": 2.5,
     "bgm_volumex": 0.4,
     "clip_size": [1080, 1920],
@@ -15,6 +15,6 @@
         "speech_key": "8b7335e4c1cf4708a48453f878a6c802",
         "service_region": "southeastasia"
     },
-    "number_of_video_list": [1, 2, 2, 2, 2, 2, 2, 2, 2, 1],
+    "number_of_video_list": [1, 2, 2, 2, 2, 2, 1],
     "generated_quantity": 1
 }

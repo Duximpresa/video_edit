@@ -1,7 +1,8 @@
 import os
 import random
-from moviepy.editor import VideoFileClip, concatenate_videoclips
-from moviepy.editor import *
+from moviepy import VideoFileClip, concatenate_videoclips
+from moviepy import *
+from moviepy.audio.fx import AudioLoop
 # from moviepy.audio.io import AudioFileClip
 from datetime import datetime
 from app import voice
@@ -88,7 +89,7 @@ def create_video_montage(folder_path, number_of_videos, clip_duration, with_audi
 
         # 创建指定长度的子片段
         print('创建指定长度的子片段')
-        subclip = video_clip.subclip(start_time, start_time + random_clip_duration)
+        subclip = video_clip.subclipped(start_time, start_time + random_clip_duration)
 
         # 根据 with_audio 参数设置子片段的音频
         if not with_audio:
@@ -150,13 +151,13 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_file, wi
 
         # 创建指定长度的子片段
         print('创建指定长度的子片段')
-        subclip = video_clip.subclip(start_time, start_time + clip_duration + 0.1)
+        subclip = video_clip.subclipped(start_time, start_time + clip_duration + 0.1)
         # 添加配音
         print(f'添加配音：{voice_file}')
         # audio_clip = AudioFileClip(voice_file).write_audiofile(f'output/test_{voice_file[-10:]}.mp3')
         audio_clip = AudioFileClip(voice_file)
         subclip = subclip.without_audio()
-        subclip = subclip.set_audio(audio_clip)
+        subclip = subclip.with_audio(audio_clip)
         # audio_clip.write_audiofile(f'output/test_{voice_file[-10:]}.mp3')
         print(f'音频时长{audio_clip.duration}')
         print(f'视频时长{subclip.duration}')
@@ -211,7 +212,7 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_file, wi
 
             # 创建指定长度的子片段
             print('创建指定长度的子片段')
-            subclip = video_clip.subclip(start_time, start_time + clip_duration + 0.1)
+            subclip = video_clip.subclipped(start_time, start_time + clip_duration + 0.1)
             # 加入子片段列表
             subclips.append(subclip)
             subclip.close()
@@ -226,7 +227,7 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_file, wi
         # 去除源音频
         subclip_all = subclip_all.without_audio()
         # 加入配音
-        subclip_all = subclip_all.set_audio(audio_clip)
+        subclip_all = subclip_all.with_audio(audio_clip)
         # audio_clip.write_audiofile(f'output/test_{voice_file[-10:]}.mp3')
         print(f'音频时长{audio_clip.duration}')
         print(f'视频时长{subclip_all.duration}')
@@ -469,23 +470,28 @@ def hexuexiong_multiple_video(project_name,
     # print(f'音频长度：{audio_clip.duration}')
     # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="h264_nvenc", bitrate="20000k", fps=fps,audio_bitrate="320k")
 
-    audio_clip = final_clip.audio.volumex(audio_volumex)
+    print(type(final_clip.audio))
+    audio_clip = final_clip.audio * audio_volumex
     # audio_clip = final_clip.audio
     print(audio_clip.duration)
     print(final_clip.duration)
     # audio_clip.write_audiofile(f'output/test_测试.mp3')
 
     # audio_clip = AudioFileClip(final_clip).volumex(audio_volumex)
-    bgm_clip = AudioFileClip(bgm_file_path).volumex(bgm_volumex)
-
-    bgm_clip = afx.audio_loop(bgm_clip, duration=final_clip_duration)
-    bgm_clip = bgm_clip.set_start(0)
+    bgm_clip = AudioFileClip(bgm_file_path) * bgm_volumex
+    print(type(bgm_clip))
+    from moviepy.audio.fx import AudioLoop
+    bgm_clip.with_effects([AudioLoop(duration=final_clip_duration)])
+    # bgm_clip = audio_loop(bgm_clip, duration=final_clip_duration)
+    # bgm_clip = AudioLoop(bgm_clip, duration=final_clip_duration)
+    print(type(bgm_clip))
+    # bgm_clip = bgm_clip.set_start(0)
 
     composite_audio = CompositeAudioClip([audio_clip, bgm_clip])
-    final_clip = final_clip.set_audio(composite_audio)
+    final_clip = final_clip.with_audio(composite_audio)
     print(final_clip)
 
-    final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="libx264", bitrate="18000k", fps=fps, audio_bitrate="320k", threads=64)
+    final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="libx264", bitrate="10000k", fps=fps, audio_bitrate="320k", threads=64)
     # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="h264_nvenc", bitrate="18000k", fps=fps, audio_bitrate="320k", threads=64, ffmpeg_params=["-b:v", "18M", "-rc", "vbr"])
 
     final_clip.close()
@@ -622,7 +628,7 @@ def main4():
                            f.lower().endswith(('.mp3', '.wav'))]
         print(voice_path_list)
 
-        generated_quantity = 5
+        generated_quantity = 1
         for i in range(generated_quantity):
             # multiple_video_generation()
             hexuexiong_multiple_video(project_name=project_name,
