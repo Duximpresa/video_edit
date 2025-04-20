@@ -1,0 +1,21 @@
+{
+    "project_name": "蛇厂混剪",
+    "output_folder": "output\\蛇厂\\蛇厂混剪\\蛇厂混剪_0420",
+    "bgm_folder_path": "BGM/谢胖子",
+    "voice_folder_path": "input/赫学熊/冲锋衣/2024_10_24/Audio/01",
+    "video_folder_path": "input/蛇厂/蛇厂-2024-04-28",
+    "audio_volumex": 2.5,
+    "bgm_volumex": 0.4,
+    "clip_size": [1920, 1080],
+    "fps": 25,
+    "voice_speed": "20%",
+    "voice_config": {
+        "voice_txt_file": "input/Voice_Text/摆地摊.txt",
+        "voice_name": "zh-CN-XiaoxiaoMultilingualNeural",
+        "speech_key": "8b7335e4c1cf4708a48453f878a6c802",
+        "service_region": "southeastasia"
+    },
+    "number_of_video_list": [5],
+    "generated_quantity": 9,
+    "one_clip_duration": 3
+}
