@@ -70,6 +70,18 @@ def find_files_by_extensions(root_dir, extensions):
                 found_files.append(os.path.join(root, file))
     return found_files
 
+# 示例用法
+root_directory = "你的根目录路径"  # 将这里替换为你要扫描的根目录
+file_extensions = [".txt", ".py", ".csv"]  # 指定你要查找的文件后缀名列表
+
+result = find_files_by_extensions(root_directory, file_extensions)
+
+if result:
+    print("找到以下文件：")
+    for file_path in result:
+        print(file_path)
+else:
+    print("未找到符合条件的文件。")
 
 
 def main():
