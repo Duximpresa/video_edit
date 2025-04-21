@@ -129,7 +129,8 @@ def multiple_video_bgm_generation(project_name,
                                         bgm_volumex,
                                         clip_size,
                                         fps,
-                                        one_clip_duration):
+                                        one_clip_duration,
+                                  duration_of_video_list):
     # 检查输出文件夹
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
@@ -154,7 +155,9 @@ def multiple_video_bgm_generation(project_name,
     for index, folder_path in enumerate(folder_path_list):
         print(folder_path)
         print(number_of_video_list[index])
-        clip = create_video_montage(folder_path, number_of_video_list[index], one_clip_duration, with_audio=False)
+        print(duration_of_video_list[index])
+        clip_duration = duration_of_video_list[index]
+        clip = create_video_montage(folder_path, number_of_video_list[index], clip_duration, with_audio=False)
         clips_list.append(clip)
     clips = [j for i in clips_list for j in i]
 
@@ -209,6 +212,7 @@ def batch_multiple_video_bgm_generation(config_file_dir):
         number_of_video_list = config["number_of_video_list"]
         generated_quantity = config["generated_quantity"]
         one_clip_duration = config["one_clip_duration"]
+        duration_of_video_list = config["duration_of_video_list"]
 
         folder_path_list = utils.get_sorted_absolute_subdirectories(video_folder_path)
         print(folder_path_list)
@@ -224,7 +228,8 @@ def batch_multiple_video_bgm_generation(config_file_dir):
                                       bgm_volumex=bgm_volumex,
                                       clip_size=clip_size,
                                       fps=fps,
-                                        one_clip_duration=one_clip_duration)
+                                    one_clip_duration=one_clip_duration,
+                                    duration_of_video_list=duration_of_video_list)
 
 def main():
     config_file_dir = os.path.join(root_dir, 'config/蛇厂')
