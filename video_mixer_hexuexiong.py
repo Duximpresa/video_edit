@@ -485,8 +485,8 @@ def hexuexiong_multiple_video(project_name,
     final_clip = final_clip.set_audio(composite_audio)
     print(final_clip)
 
-    final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="libx264", bitrate="18000k", fps=fps, audio_bitrate="320k", threads=64)
-    # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="h264_nvenc", bitrate="18000k", fps=fps, audio_bitrate="320k", threads=64, ffmpeg_params=["-b:v", "18M", "-rc", "vbr"])
+    # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="libx264", bitrate="18000k", fps=fps, audio_bitrate="320k", threads=64)
+    final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="h264_nvenc", bitrate="18000k", fps=fps, audio_bitrate="128k", threads=64, ffmpeg_params=["-b:v", "18M", "-rc", "vbr"])
 
     final_clip.close()
     del final_clip

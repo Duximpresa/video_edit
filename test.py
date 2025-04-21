@@ -20,7 +20,7 @@ root_dir = utils.root_dir()
 
 
 def main():
-    config_file_dir = os.path.join(root_dir, 'config/蛇厂')
+    config_file_dir = os.path.join(root_dir, 'config/风景')
     batch_multiple_video_bgm_generation(config_file_dir)
 
 if __name__ == '__main__':

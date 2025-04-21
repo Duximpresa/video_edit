@@ -1,6 +1,6 @@
 {
     "project_name": "赫学熊混剪_加绒裤",
-    "output_folder": "output\\赫学熊混剪\\0301\\加绒裤",
+    "output_folder": "output\\赫学熊混剪\\0324",
     "bgm_folder_path": "BGM/赫学熊",
     "voice_folder_path": "input/赫学熊/加绒裤/2024_11_03/audio/01",
     "video_folder_path": "input/赫学熊/加绒裤/2024_11_03/video",
@@ -16,5 +16,5 @@
         "service_region": "southeastasia"
     },
     "number_of_video_list": [1, 1, 2, 2, 2, 1],
-    "generated_quantity": 1
+    "generated_quantity": 5
 }

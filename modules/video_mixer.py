@@ -149,7 +149,7 @@ def multiple_video_bgm_generation(project_name,
     print(final_clip_name)
     output_file = f'{os.path.join(output_folder, final_clip_name)}.mp4'
     print(output_file)
-
+    print(clips)
     final_clip = concatenate_videoclips(clips)
     # final_clip.size = clip_size
     print(f'成片尺寸：{final_clip.size}')
@@ -162,8 +162,9 @@ def multiple_video_bgm_generation(project_name,
     # 因为BGM是超长的，这里截取视频长度
     final_clip = final_clip.set_duration(final_clip_duration)
 
-    # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="libx264", bitrate="20000k", fps=fps,audio_bitrate="320k")
-    final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="h264_nvenc", bitrate="15000k", fps=fps,audio_bitrate="320k")
+    # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="libx264", bitrate="15000k", fps=fps,audio_bitrate="256k")
+    # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="h264_nvenc", bitrate="15000k", fps=fps,audio_bitrate="320k")
+    final_clip.write_videofile(output_file, audio_codec="aac", codec="h264_nvenc", bitrate="19000k", fps=fps,audio_bitrate="320k")
 
     final_clip.close()
     del final_clip
@@ -197,6 +198,7 @@ def batch_multiple_video_bgm_generation(config_file_dir):
         one_clip_duration = config["one_clip_duration"]
 
         folder_path_list = utils.get_sorted_absolute_subdirectories(video_folder_path)
+        print(folder_path_list)
 
         for i in range(generated_quantity):
             # multiple_video_generation()
