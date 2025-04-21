@@ -55,6 +55,7 @@ def generate_datetime_string(prefix):
 def get_bgm_list_choice(BGM_folder):
     BGM_list = [f for f in os.listdir(BGM_folder) if f.lower().endswith((".mp3", ".wav"))]
     random.shuffle(BGM_list)
+    random.shuffle(BGM_list)
     return random.choice(BGM_list)
 
 def create_video_montage(folder_path, number_of_videos, clip_duration, with_audio=False):
@@ -85,9 +86,21 @@ def create_video_montage(folder_path, number_of_videos, clip_duration, with_audi
         max_start_time = max(0, video_clip.duration - random_clip_duration)
         start_time = random.uniform(0, max_start_time)
 
-        # 创建指定长度的子片段
-        print('创建指定长度的子片段')
-        subclip = video_clip.subclip(start_time, start_time + random_clip_duration)
+        print(f'video_clip.duration :{video_clip.duration }')
+        print(f'random_clip_duration:{random_clip_duration}')
+        print(f'start_time:{start_time}')
+        print(f'max_start_time:{max_start_time}')
+        print(f'end_time:{start_time + random_clip_duration}')
+
+        if video_clip.duration > random_clip_duration:
+            # 创建指定长度的子片段
+            print('创建指定长度的子片段')
+            subclip = video_clip.subclip(start_time, start_time + random_clip_duration)
+        else:
+            print('片段时长小于所需时长')
+            start_time = 0
+            end_time = video_clip.duration
+            subclip = video_clip.subclip(start_time, end_time)
 
         # 根据 with_audio 参数设置子片段的音频
         if not with_audio:
