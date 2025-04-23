@@ -441,8 +441,8 @@ def multiple_video_voice_bgm_generation(project_name,
     print(output_file)
 
     final_clip = concatenate_videoclips(clips)
-    # final_clip.size = clip_size
-    # print(f'成片尺寸：{final_clip.size}')
+    final_clip = final_clip.resize(newsize=(clip_size[0], clip_size[1]))
+    print(f'成片尺寸：{final_clip.size}')
     final_clip_duration = final_clip.duration
     print(f'视频长度：{final_clip_duration}')
     # print(f'音频长度：{audio_clip.duration}')
@@ -463,9 +463,11 @@ def multiple_video_voice_bgm_generation(project_name,
     composite_audio = CompositeAudioClip([audio_clip, bgm_clip])
     final_clip = final_clip.set_audio(composite_audio)
     print(final_clip)
+    print(f'最终成片尺寸：{final_clip.size}')
 
     # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="libx264", bitrate="18000k", fps=fps, audio_bitrate="320k", threads=64)
-    final_clip.write_videofile(output_file, audio_codec="aac", codec="h264_nvenc", bitrate="20000k", fps=fps, audio_bitrate="128k", threads=64, ffmpeg_params=["-b:v", "20M", "-rc", "vbr"])
+    # final_clip.write_videofile(output_file, audio_codec="aac", codec="h264_nvenc", bitrate="20000k", fps=fps, audio_bitrate="128k", threads=64, ffmpeg_params=["-b:v", "20M", "-rc", "vbr"])
+    final_clip.write_videofile(output_file, audio_codec="aac", codec="h264_nvenc", bitrate="20000k", fps=fps, audio_bitrate="256k")
 
     final_clip.close()
     del final_clip
