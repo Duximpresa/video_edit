@@ -1,0 +1,20 @@
+{
+    "project_name": "赫学熊混剪_索罗娜短袖",
+    "output_folder": "output\\赫学熊混剪\\索罗娜短袖\\索罗娜短袖_0423",
+    "bgm_folder_path": "BGM/赫学熊",
+    "voice_folder_path": "input/赫学熊/索罗娜短袖/audio",
+    "video_folder_path": "input/赫学熊/索罗娜短袖/video",
+    "audio_volumex": 2.5,
+    "bgm_volumex": 0.4,
+    "clip_size": [1080, 1920],
+    "fps": 60,
+    "voice_speed": "20%",
+    "voice_config": {
+        "voice_txt_file": "input/Voice_Text/摆地摊.txt",
+        "voice_name": "zh-CN-XiaoxiaoMultilingualNeural",
+        "speech_key": "8b7335e4c1cf4708a48453f878a6c802",
+        "service_region": "southeastasia"
+    },
+    "number_of_video_list": [2, 2, 2, 2, 2, 2, 2],
+    "generated_quantity": 1
+}
