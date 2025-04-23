@@ -18,6 +18,14 @@ import json
 
 root_dir = utils.root_dir()
 
+def kill_ffmpeg_processes():
+    for proc in psutil.process_iter():
+        try:
+            if 'ffmpeg' in proc.name().lower():
+                proc.kill()
+        except psutil.NoSuchProcess:
+            pass
+
 def random_clip(video_path, clip_duration, output_path):
     # 加载视频
     video = VideoFileClip(video_path)
@@ -461,6 +469,7 @@ def multiple_video_voice_bgm_generation(project_name,
 
     final_clip.close()
     del final_clip
+    kill_ffmpeg_processes()
 
 def batch_multiple_video_voice_bgm_generation(config_file_dir):
     # config_file_dir = 'config'
