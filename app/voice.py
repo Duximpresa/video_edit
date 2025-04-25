@@ -119,7 +119,7 @@ def main():
     voice_file = f'{root_dir}/input/Voice_Text/摆地摊.txt'
     project_name = '测试语音'
     voice_name = "zh-CN-XiaoxiaoMultilingualNeural"
-    voice_speed = '20%'
+    voice_speed = '-50%'
     text2speech(voice_file, voice_name, project_name, speech_config, voice_speed=voice_speed)
 
 

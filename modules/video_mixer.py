@@ -467,7 +467,7 @@ def multiple_video_voice_bgm_generation(project_name,
 
     # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="libx264", bitrate="18000k", fps=fps, audio_bitrate="320k", threads=64)
     # final_clip.write_videofile(output_file, audio_codec="aac", codec="h264_nvenc", bitrate="20000k", fps=fps, audio_bitrate="128k", threads=64, ffmpeg_params=["-b:v", "20M", "-rc", "vbr"])
-    final_clip.write_videofile(output_file, audio_codec="aac", codec="h264_nvenc", bitrate="20000k", fps=fps, audio_bitrate="256k")
+    final_clip.write_videofile(output_file, audio_codec="aac", codec="h264_nvenc", bitrate="18000k", fps=fps, audio_bitrate="256k")
 
     final_clip.close()
     del final_clip
