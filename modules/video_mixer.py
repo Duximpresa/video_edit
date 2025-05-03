@@ -186,9 +186,19 @@ def multiple_video_bgm_generation(project_name,
     # 因为BGM是超长的，这里截取视频长度
     final_clip = final_clip.set_duration(final_clip_duration)
 
+    ffmpeg_params = [
+        "-pix_fmt", "yuv420p",  # 强制输出 YUV 像素格式
+        "-vf", "format=yuv420p", # 使用滤镜确保输入转换为 YUV
+        "-colorspace", "bt709",  # 指定色彩空间为 Rec.709
+        "-color_primaries", "bt709",  # 指定色彩原色
+        "-color_trc", "bt709",  # 指定传递特性（gamma）
+        "-color_range", "pc"  # 指定色彩范围（tv 表示有限范围，pc 表示全范围）
+    ]
+
     # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="libx264", bitrate="15000k", fps=fps,audio_bitrate="256k")
     # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="h264_nvenc", bitrate="15000k", fps=fps,audio_bitrate="320k")
-    final_clip.write_videofile(output_file, audio_codec="aac", codec="h264_nvenc", bitrate="19000k", fps=fps,audio_bitrate="320k")
+    final_clip.write_videofile(output_file, audio_codec="aac", codec="h264_nvenc", bitrate="19000k", fps=fps,audio_bitrate="320k", ffmpeg_params=ffmpeg_params)
+    # final_clip.write_videofile(output_file, audio_codec="aac", codec="libx264", bitrate="19000k", fps=fps,audio_bitrate="320k", ffmpeg_params=ffmpeg_params)
 
     final_clip.close()
     del final_clip

@@ -1,6 +1,6 @@
 {
     "project_name": "清川大桥",
-    "output_folder": "output\\风景\\清川大桥\\清川大桥_0421",
+    "output_folder": "output\\风景\\清川大桥\\清川大桥_0503",
     "bgm_folder_path": "BGM/风景类BGM",
     "voice_folder_path": "input/赫学熊/冲锋衣/2024_10_24/Audio/01",
     "video_folder_path": "input/风景",
@@ -17,6 +17,6 @@
     },
     "number_of_video_list": [8],
     "duration_of_video_list": [3],
-    "generated_quantity": 1,
-    "one_clip_duration": 3
+    "generated_quantity": 10,
+    "one_clip_duration": 2
 }

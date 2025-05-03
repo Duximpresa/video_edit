@@ -89,7 +89,7 @@ def main():
     speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=service_region)
     speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Riff44100Hz16BitMonoPcm)
 
-    text = '只有在承认自己的无知后，才能真正从骨子里变得谦和，不再恃才傲物，不再咄咄逼人。'
+    text = '人活着的意义不在乎得到了什么，而在于你如何面对失去。活着本身就是一种坚持，无论命运如何无常，都要用尽全力去感受生命的每一刻温暖与苦痛。'
     project_name = '测试语音'
     voice_name = "zh-CN-XiaoqiuNeural"
     voice_speed = '0%'
