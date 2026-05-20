@@ -33,5 +33,5 @@ def main2():
     batch_multiple_video_voice_bgm_generation(config_file_dir)
 
 if __name__ == '__main__':
-    main()
-    # main2()
+    # main()
+    main2()

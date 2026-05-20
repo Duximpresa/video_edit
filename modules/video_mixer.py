@@ -475,9 +475,19 @@ def multiple_video_voice_bgm_generation(project_name,
     print(final_clip)
     print(f'最终成片尺寸：{final_clip.size}')
 
+    ffmpeg_params = [
+        "-pix_fmt", "yuv420p",  # 强制输出 YUV 像素格式
+        "-vf", "format=yuv420p", # 使用滤镜确保输入转换为 YUV
+        "-colorspace", "bt709",  # 指定色彩空间为 Rec.709
+        "-color_primaries", "bt709",  # 指定色彩原色
+        "-color_trc", "bt709",  # 指定传递特性（gamma）
+        "-color_range", "pc"  # 指定色彩范围（tv 表示有限范围，pc 表示全范围）
+    ]
+
     # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="libx264", bitrate="18000k", fps=fps, audio_bitrate="320k", threads=64)
     # final_clip.write_videofile(output_file, audio_codec="aac", codec="h264_nvenc", bitrate="20000k", fps=fps, audio_bitrate="128k", threads=64, ffmpeg_params=["-b:v", "20M", "-rc", "vbr"])
-    final_clip.write_videofile(output_file, audio_codec="aac", codec="h264_nvenc", bitrate="18000k", fps=fps, audio_bitrate="256k")
+    # final_clip.write_videofile(output_file, audio_codec="aac", codec="h264_nvenc", bitrate="18000k", fps=fps, audio_bitrate="256k")
+    final_clip.write_videofile(output_file, audio_codec="aac", codec="h264_nvenc", bitrate="18000k", fps=fps, audio_bitrate="256k",ffmpeg_params=ffmpeg_params)
 
     final_clip.close()
     del final_clip
