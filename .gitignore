@@ -1,0 +1,15 @@
+.idea/
+input/
+output/
+storage/Voices/
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+*.log
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
