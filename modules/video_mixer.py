@@ -1,22 +1,32 @@
 import os
 import random
-from distutils.command.config import config
-
-from moviepy.editor import VideoFileClip, concatenate_videoclips
-from moviepy.editor import *
-# from moviepy.audio.io import AudioFileClip
+from moviepy.editor import (
+    AudioFileClip,
+    CompositeAudioClip,
+    VideoFileClip,
+    afx,
+    concatenate_videoclips,
+)
 from datetime import datetime
-from app import voice
 from utils import utils
-import azure.cognitiveservices.speech as speechsdk
-#pip install azure-cognitiveservices-speech
-# from moviepy.video import fx
-from concurrent.futures import ThreadPoolExecutor
-from multiprocessing import Process
 import psutil
 import json
 
 root_dir = utils.root_dir()
+
+
+def _ensure_sampleable(items, needed, label):
+    if needed <= 0:
+        raise ValueError(f"{label} must be positive, got {needed}")
+    if len(items) < needed:
+        raise ValueError(f"{label} requires {needed} items, but only {len(items)} available")
+
+
+def _ensure_parallel_lengths(folder_path_list, number_of_video_list, duration_of_video_list):
+    if not (len(folder_path_list) == len(number_of_video_list) == len(duration_of_video_list)):
+        raise ValueError(
+            "Length mismatch: folder_path_list, number_of_video_list, and duration_of_video_list must match"
+        )
 
 def kill_ffmpeg_processes():
     for proc in psutil.process_iter():
@@ -70,6 +80,7 @@ def create_video_montage(folder_path, number_of_videos, clip_duration, with_audi
     # 从指定文件夹获取所有视频文件
     video_files = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if
                    f.endswith(('.mp4', '.avi', '.mov'))]
+    _ensure_sampleable(video_files, number_of_videos, f"video files in {folder_path}")
     print('从指定文件夹获取所有视频文件')
     # 随机选择指定数量的视频文件
     selected_videos = random.sample(video_files, number_of_videos)
@@ -159,6 +170,7 @@ def multiple_video_bgm_generation(project_name,
     # print(one_clip_duration)
 
     # 片段混剪
+    _ensure_parallel_lengths(folder_path_list, number_of_video_list, duration_of_video_list)
     clips_list = []
     for index, folder_path in enumerate(folder_path_list):
         print(folder_path)
@@ -182,6 +194,7 @@ def multiple_video_bgm_generation(project_name,
 
     # 生成bgm片段
     bgm_clip = AudioFileClip(bgm_file_path).volumex(bgm_volumex)
+    bgm_clip = afx.audio_loop(bgm_clip, duration=final_clip_duration)
     final_clip = final_clip.set_audio(bgm_clip)
     # 因为BGM是超长的，这里截取视频长度
     final_clip = final_clip.set_duration(final_clip_duration)
@@ -201,6 +214,7 @@ def multiple_video_bgm_generation(project_name,
     # final_clip.write_videofile(output_file, audio_codec="aac", codec="libx264", bitrate="19000k", fps=fps,audio_bitrate="320k", ffmpeg_params=ffmpeg_params)
 
     final_clip.close()
+    bgm_clip.close()
     del final_clip
 
 
@@ -256,6 +270,7 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_folder_p
     print('从指定文件夹获取所有的音频文件')
     voice_files = [os.path.join(voice_folder_path, f) for f in os.listdir(voice_folder_path) if
                    f.endswith(('.mp3', '.acc', '.m4a'))]
+    _ensure_sampleable(voice_files, 1, f"voice files in {voice_folder_path}")
     # 配音的文件列表
     print(voice_files)
     # 随机选择单个的音频文件
@@ -264,13 +279,15 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_folder_p
     print(f'选择的配音文件{voice_file}')
     # 获取配音长度
     print('获取配音时长')
-    voice_duration = AudioFileClip(voice_file).duration
+    with AudioFileClip(voice_file) as voice_clip_meta:
+        voice_duration = voice_clip_meta.duration
     print(f'【配音时长】：{voice_duration}')
     # clip_duration = voice_duration
 
     # 从指定文件夹获取所有视频文件
     video_files = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if
                    f.endswith(('.mp4', '.avi', '.mov'))]
+    _ensure_sampleable(video_files, number_of_videos, f"video files in {folder_path}")
     print(f'video_files: {video_files}')
     print('从指定文件夹获取所有视频文件')
     # 判断要选择的视频数量
@@ -425,6 +442,8 @@ def multiple_video_voice_bgm_generation(project_name,
     # bgm_clip = AudioFileClip(bgm_file_path).volumex(bgm_volumex)
 
     # 片段混剪
+    if len(folder_path_list) != len(number_of_video_list) or len(folder_path_list) != len(voice_folder_path_list):
+        raise ValueError("Length mismatch: folder_path_list, number_of_video_list, and voice_folder_path_list must match")
     clips_list = []
     for index, folder_path in enumerate(folder_path_list):
         print(f'【配音文件夹】：{voice_folder_path_list[index]}')
@@ -490,8 +509,9 @@ def multiple_video_voice_bgm_generation(project_name,
     final_clip.write_videofile(output_file, audio_codec="aac", codec="h264_nvenc", bitrate="18000k", fps=fps, audio_bitrate="256k",ffmpeg_params=ffmpeg_params)
 
     final_clip.close()
+    bgm_clip.close()
+    audio_clip.close()
     del final_clip
-    kill_ffmpeg_processes()
 
 def batch_multiple_video_voice_bgm_generation(config_file_dir):
     # config_file_dir = 'config'
