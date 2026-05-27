@@ -1,4 +1,4 @@
-from moviepy.editor import VideoFileClip, AudioFileClip
+from moviepy import VideoFileClip, AudioFileClip
 import os
 import random
 
@@ -43,7 +43,7 @@ def add_music_to_videos(video_folder, music_folder, output_folder):
         print(f'【视频时长】：{video_clip.duration}')
         print('-' * 50)
         # # 将音乐添加到视频中，保持视频的主要时长
-        final_clip = video_clip.set_audio(music_clip).set_duration(video_clip.duration)
+        final_clip = video_clip.with_audio(music_clip).with_duration(video_clip.duration)
         #
         # # 保存成新的视频文件
         # output_path = os.path.join(output_folder, f"{video_name.split('.')[0]}_music.{video_name.split('.')[-1]}")

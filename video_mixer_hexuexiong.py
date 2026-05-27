@@ -1,7 +1,7 @@
 import os
 import random
-from moviepy.editor import VideoFileClip, concatenate_videoclips
-from moviepy.editor import *
+from moviepy import VideoFileClip, concatenate_videoclips
+from moviepy import *
 # from moviepy.audio.io import AudioFileClip
 from datetime import datetime
 from app import voice
@@ -33,7 +33,7 @@ def random_clip(video_path, clip_duration, output_path):
     start_time = random.uniform(0, max_start)
 
     # 截取视频片段
-    clip = video.subclip(start_time, start_time + clip_duration)
+    clip = video.subclipped(start_time, start_time + clip_duration)
 
     # 输出视频片段
     # clip.write_videofile(output_path, codec='libx264')
@@ -75,7 +75,7 @@ def create_video_montage(folder_path, number_of_videos, clip_duration, with_audi
         # 加载视频文件
         print(f'加载视频文件:{video}')
         video_clip = VideoFileClip(video)
-        # video_clip = video_clip.resize((1080, 1920))
+        # video_clip = video_clip.resized((1080, 1920))
         print(f'视频分辨率：{video_clip.size}')
 
         # 随机选择片段的开始时间
@@ -88,7 +88,7 @@ def create_video_montage(folder_path, number_of_videos, clip_duration, with_audi
 
         # 创建指定长度的子片段
         print('创建指定长度的子片段')
-        subclip = video_clip.subclip(start_time, start_time + random_clip_duration)
+        subclip = video_clip.subclipped(start_time, start_time + random_clip_duration)
 
         # 根据 with_audio 参数设置子片段的音频
         if not with_audio:
@@ -137,7 +137,7 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_file, wi
         # 加载视频文件
         print(f'加载视频文件:{video}')
         video_clip = VideoFileClip(video)
-        # video_clip = video_clip.resize((1080, 1920))
+        # video_clip = video_clip.resized((1080, 1920))
         print(f'视频分辨率：{video_clip.size}')
 
         # 随机选择片段的开始时间
@@ -150,13 +150,13 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_file, wi
 
         # 创建指定长度的子片段
         print('创建指定长度的子片段')
-        subclip = video_clip.subclip(start_time, start_time + clip_duration + 0.1)
+        subclip = video_clip.subclipped(start_time, start_time + clip_duration + 0.1)
         # 添加配音
         print(f'添加配音：{voice_file}')
         # audio_clip = AudioFileClip(voice_file).write_audiofile(f'output/test_{voice_file[-10:]}.mp3')
         audio_clip = AudioFileClip(voice_file)
         subclip = subclip.without_audio()
-        subclip = subclip.set_audio(audio_clip)
+        subclip = subclip.with_audio(audio_clip)
         # audio_clip.write_audiofile(f'output/test_{voice_file[-10:]}.mp3')
         print(f'音频时长{audio_clip.duration}')
         print(f'视频时长{subclip.duration}')
@@ -198,7 +198,7 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_file, wi
             # 加载视频文件
             print(f'加载视频文件:{video}')
             video_clip = VideoFileClip(video)
-            # video_clip = video_clip.resize((1080, 1920))
+            # video_clip = video_clip.resized((1080, 1920))
             print(f'视频分辨率：{video_clip.size}')
 
             # 随机选择片段的开始时间
@@ -211,7 +211,7 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_file, wi
 
             # 创建指定长度的子片段
             print('创建指定长度的子片段')
-            subclip = video_clip.subclip(start_time, start_time + clip_duration + 0.1)
+            subclip = video_clip.subclipped(start_time, start_time + clip_duration + 0.1)
             # 加入子片段列表
             subclips.append(subclip)
             subclip.close()
@@ -226,7 +226,7 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_file, wi
         # 去除源音频
         subclip_all = subclip_all.without_audio()
         # 加入配音
-        subclip_all = subclip_all.set_audio(audio_clip)
+        subclip_all = subclip_all.with_audio(audio_clip)
         # audio_clip.write_audiofile(f'output/test_{voice_file[-10:]}.mp3')
         print(f'音频时长{audio_clip.duration}')
         print(f'视频时长{subclip_all.duration}')
@@ -351,10 +351,10 @@ def multiple_video_voice_bgm_generation(project_name,
     bgm_file_path = os.path.join(root_dir, bgm_folder_path, bgm_file)
 
     # 配音和BGM进行混音
-    audio_clip = AudioFileClip(voice_filename).volumex(audio_volumex)
-    bgm_clip = AudioFileClip(bgm_file_path).volumex(bgm_volumex)
+    audio_clip = AudioFileClip(voice_filename) * (audio_volumex)
+    bgm_clip = AudioFileClip(bgm_file_path) * (bgm_volumex)
     # bgm_clip = afx.audio_loop(bgm_clip, duration=audio_clip.duration)
-    # bgm_clip = bgm_clip.set_start(0)
+    # bgm_clip = bgm_clip.with_start(0)
     composite_audio = CompositeAudioClip([audio_clip, bgm_clip])
     # composite_audio.write_audiofile('test.mp3', codec='libmp3lame', fps=audio_clip.fps)
     # final_clip_duration = audio_clip.duration
@@ -388,9 +388,9 @@ def multiple_video_voice_bgm_generation(project_name,
 
     if final_clip_duration > audio_clip.duration:
         bgm_clip = afx.audio_loop(bgm_clip, duration=final_clip_duration)
-        bgm_clip = bgm_clip.set_start(0)
+        bgm_clip = bgm_clip.with_start(0)
         composite_audio = CompositeAudioClip([audio_clip, bgm_clip])
-        final_clip = final_clip.set_audio(composite_audio)
+        final_clip = final_clip.with_audio(composite_audio)
         final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="h264_nvenc", bitrate="20000k", fps=fps,
                                    audio_bitrate="320k")
         # final_clip.write_videofile(output_file, audio_codec=None, codec="h264_nvenc", bitrate="20000k", fps=fps, audio_bitrate="320k")
@@ -432,8 +432,8 @@ def hexuexiong_multiple_video(project_name,
     bgm_file_path = os.path.join(root_dir, bgm_folder_path, bgm_file)
 
     # 配音和BGM进行混音
-    # audio_clip = AudioFileClip(voice_filename).volumex(audio_volumex)
-    # bgm_clip = AudioFileClip(bgm_file_path).volumex(bgm_volumex)
+    # audio_clip = AudioFileClip(voice_filename) * (audio_volumex)
+    # bgm_clip = AudioFileClip(bgm_file_path) * (bgm_volumex)
 
     # 片段混剪
     clips_list = []
@@ -469,20 +469,20 @@ def hexuexiong_multiple_video(project_name,
     # print(f'音频长度：{audio_clip.duration}')
     # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="h264_nvenc", bitrate="20000k", fps=fps,audio_bitrate="320k")
 
-    audio_clip = final_clip.audio.volumex(audio_volumex)
+    audio_clip = final_clip.audio * (audio_volumex)
     # audio_clip = final_clip.audio
     print(audio_clip.duration)
     print(final_clip.duration)
     # audio_clip.write_audiofile(f'output/test_测试.mp3')
 
-    # audio_clip = AudioFileClip(final_clip).volumex(audio_volumex)
-    bgm_clip = AudioFileClip(bgm_file_path).volumex(bgm_volumex)
+    # audio_clip = AudioFileClip(final_clip) * (audio_volumex)
+    bgm_clip = AudioFileClip(bgm_file_path) * (bgm_volumex)
 
     bgm_clip = afx.audio_loop(bgm_clip, duration=final_clip_duration)
-    bgm_clip = bgm_clip.set_start(0)
+    bgm_clip = bgm_clip.with_start(0)
 
     composite_audio = CompositeAudioClip([audio_clip, bgm_clip])
-    final_clip = final_clip.set_audio(composite_audio)
+    final_clip = final_clip.with_audio(composite_audio)
     print(final_clip)
 
     # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="libx264", bitrate="18000k", fps=fps, audio_bitrate="320k", threads=64)
@@ -577,10 +577,10 @@ def main2():
     print(bgm_file)
     bgm_file_path = os.path.join(root_dir, bgm_folder_path, bgm_file)
     voice_filename = 'storage/Voices/测试项目_fabdf1707ce6133379d73e94ba529f52650ba0378fdaed2b6eb0e8cefde052b7.wav'
-    audio_clip = AudioFileClip(voice_filename).volumex(audio_volumex)
-    bgm_clip = AudioFileClip(bgm_file_path).volumex(bgm_volumex)
+    audio_clip = AudioFileClip(voice_filename) * (audio_volumex)
+    bgm_clip = AudioFileClip(bgm_file_path) * (bgm_volumex)
     bgm_clip = afx.audio_loop(bgm_clip, duration=audio_clip.duration)
-    bgm_clip = bgm_clip.set_start(0)
+    bgm_clip = bgm_clip.with_start(0)
     # composite_audio = CompositeAudioClip([audio_clip, bgm_clip])
     # composite_audio.write_audiofile('test.mp3', codec='libmp3lame', fps=audio_clip.fps)
     final_clip_duration = audio_clip.duration

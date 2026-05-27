@@ -1,6 +1,6 @@
 import os
 import random
-from moviepy.editor import VideoFileClip, concatenate_videoclips
+from moviepy import VideoFileClip, concatenate_videoclips
 from datetime import datetime
 
 
@@ -48,7 +48,7 @@ def create_video_montage(folder_path, number_of_videos, clip_duration, output_fi
         start_time = random.uniform(0, max_start_time)
 
         # 创建指定长度的子片段
-        subclip = video_clip.subclip(start_time, start_time + random_clip_duration)
+        subclip = video_clip.subclipped(start_time, start_time + random_clip_duration)
 
         # 根据 with_audio 参数设置子片段的音频
         if not with_audio:
