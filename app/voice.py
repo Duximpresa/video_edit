@@ -7,7 +7,7 @@ from tqdm import tqdm
 # 登录
 root_dir = utils.root_dir()
 
-speech_key = "8b7335e4c1cf4708a48453f878a6c802"
+speech_key = os.getenv("AZURE_SPEECH_KEY", "")
 service_region = "southeastasia"
 speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=service_region)
 speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Riff44100Hz16BitMonoPcm)

@@ -1,1 +1,7 @@
 moviepy>=2,<3
+azure-cognitiveservices-speech
+opencv-python
+pillow
+numpy>=1.25,<2.4
+tqdm
+imageio-ffmpeg

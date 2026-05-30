@@ -514,7 +514,7 @@ def main():
     # 配音部分参数
     voice_txt_file = f'{root_dir}/input/Voice_Text/摆地摊.txt'
     voice_name = "zh-CN-XiaoxiaoMultilingualNeural"
-    speech_key = "8b7335e4c1cf4708a48453f878a6c802"
+    speech_key = os.getenv("AZURE_SPEECH_KEY", "")
     service_region = "southeastasia"
     speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=service_region)
     speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Riff44100Hz16BitMonoPcm)
@@ -619,6 +619,8 @@ def main4():
         voice_txt_file = config["voice_config"]["voice_txt_file"]
         voice_name = config["voice_config"]["voice_name"]
         speech_key = config["voice_config"]["speech_key"]
+        if isinstance(speech_key, str) and speech_key.startswith("${") and speech_key.endswith("}"):
+            speech_key = os.getenv(speech_key[2:-1], "")
         service_region = config["voice_config"]["service_region"]
         number_of_video_list = config["number_of_video_list"]
         generated_quantity = config["generated_quantity"]

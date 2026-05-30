@@ -16,9 +16,16 @@ from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import Process
 import psutil
 import json
+from modules.subtitle_tools import burn_subtitles_to_video, build_subtitle_segments, get_subtitle_text
 
 root_dir = utils.root_dir()
 AUDIO_END_PADDING = 0.05
+
+
+def resolve_config_value(value):
+    if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+        return os.getenv(value[2:-1], "")
+    return value
 
 
 def scale_audio_volume(audio_clip, factor):
@@ -233,7 +240,7 @@ def batch_multiple_video_bgm_generation(config_file_dir):
         voice_speed = config["voice_speed"]
         voice_txt_file = config["voice_config"]["voice_txt_file"]
         voice_name = config["voice_config"]["voice_name"]
-        speech_key = config["voice_config"]["speech_key"]
+        speech_key = resolve_config_value(config["voice_config"]["speech_key"])
         service_region = config["voice_config"]["service_region"]
         number_of_video_list = config["number_of_video_list"]
         generated_quantity = config["generated_quantity"]
@@ -259,7 +266,13 @@ def batch_multiple_video_bgm_generation(config_file_dir):
 
 
 
-def create_video_and_voice_montage(folder_path, number_of_videos, voice_folder_path, with_audio=True):
+def create_video_and_voice_montage(
+        folder_path,
+        number_of_videos,
+        voice_folder_path,
+        with_audio=True,
+        subtitle_filename='subtitles.json',
+        return_metadata=False):
     # 从指定文件夹获取所有的音频文件
     print('从指定文件夹获取所有的音频文件')
     voice_files = [os.path.join(voice_folder_path, f) for f in os.listdir(voice_folder_path) if
@@ -269,6 +282,7 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_folder_p
     # 随机选择单个的音频文件
     print('随机选择单个的音频文件')
     voice_file = random.sample(voice_files, 1)[0]
+    subtitle_text = get_subtitle_text(voice_folder_path, voice_file, subtitle_filename)
     print(f'选择的配音文件{voice_file}')
     # 获取配音长度
     print('获取配音时长')
@@ -413,6 +427,12 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_folder_p
     # print(clips)
     # random.shuffle(clips)
     print('返回剪辑')
+    if return_metadata:
+        return {
+            "clips": clips,
+            "voice_file": voice_file,
+            "subtitle_text": subtitle_text,
+        }
     return clips
 
 
@@ -425,7 +445,14 @@ def multiple_video_voice_bgm_generation(project_name,
                               bgm_volumex,
                               clip_size,
                               fps,
-                              voice_folder_path_list):
+                              voice_folder_path_list,
+                              subtitle_enabled=True,
+                              subtitle_filename='subtitles.json',
+                              subtitle_style=None,
+                              split_on_comma=True,
+                              split_timing_mode="character_ratio",
+                              speech_key=None,
+                              service_region=None):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
@@ -442,6 +469,8 @@ def multiple_video_voice_bgm_generation(project_name,
 
     # 片段混剪
     clips_list = []
+    subtitle_segments = []
+    subtitle_cursor = 0
     for index, folder_path in enumerate(folder_path_list):
         print(f'【配音文件夹】：{voice_folder_path_list[index]}')
         print(f'【视频文件夹】：{folder_path}')
@@ -452,7 +481,30 @@ def multiple_video_voice_bgm_generation(project_name,
         # print(f'【配音时长】：{voice_duration}')
         # clip_duration = voice_duration
         voice_folder_path = voice_folder_path_list[index]
-        clip = create_video_and_voice_montage(folder_path, number_of_video_list[index], voice_folder_path, with_audio=True)
+        montage = create_video_and_voice_montage(
+            folder_path,
+            number_of_video_list[index],
+            voice_folder_path,
+            with_audio=True,
+            subtitle_filename=subtitle_filename,
+            return_metadata=True,
+        )
+        clip = montage["clips"]
+        for item in clip:
+            segment_start = subtitle_cursor
+            segment_end = subtitle_cursor + item.duration
+            subtitle_segments.extend(build_subtitle_segments(
+                voice_folder_path,
+                montage["voice_file"],
+                segment_start,
+                segment_end,
+                filename=subtitle_filename,
+                split_on_comma=split_on_comma,
+                split_timing_mode=split_timing_mode,
+                speech_key=speech_key,
+                service_region=service_region,
+            ))
+            subtitle_cursor += item.duration
         print(f'成功返回剪辑{clip}')
         clips_list.append(clip)
         print(f'加入剪辑列表')
@@ -507,6 +559,8 @@ def multiple_video_voice_bgm_generation(project_name,
 
     final_clip.close()
     del final_clip
+    if subtitle_enabled:
+        burn_subtitles_to_video(output_file, subtitle_segments, style=subtitle_style)
     kill_ffmpeg_processes()
 
 def batch_multiple_video_voice_bgm_generation(config_file_dir):
@@ -529,10 +583,32 @@ def batch_multiple_video_voice_bgm_generation(config_file_dir):
         voice_speed = config["voice_speed"]
         voice_txt_file = config["voice_config"]["voice_txt_file"]
         voice_name = config["voice_config"]["voice_name"]
-        speech_key = config["voice_config"]["speech_key"]
+        speech_key = resolve_config_value(config["voice_config"]["speech_key"])
         service_region = config["voice_config"]["service_region"]
         number_of_video_list = config["number_of_video_list"]
         generated_quantity = config["generated_quantity"]
+        subtitle_config = config.get("subtitle_config", {})
+        subtitle_enabled = subtitle_config.get("enabled", config.get("subtitle_enabled", True))
+        subtitle_filename = subtitle_config.get("filename", config.get("subtitle_filename", "subtitles.json"))
+        split_on_comma = subtitle_config.get("split_on_comma", config.get("subtitle_split_on_comma", True))
+        split_timing_mode = subtitle_config.get(
+            "split_timing_mode",
+            config.get("subtitle_split_timing_mode", "character_ratio"),
+        )
+        subtitle_style = {
+            "font": subtitle_config.get("font", config.get("subtitle_font")),
+            "font_path": subtitle_config.get("font_path", config.get("subtitle_font_path")),
+            "font_size": subtitle_config.get("font_size", config.get("subtitle_font_size", 67)),
+            "letter_spacing": subtitle_config.get("letter_spacing", config.get("subtitle_letter_spacing", 0)),
+            "color": subtitle_config.get("color", config.get("subtitle_color", "#FFDE00")),
+            "opacity": subtitle_config.get("opacity", config.get("subtitle_opacity", 1.0)),
+            "stroke_enabled": subtitle_config.get("stroke_enabled", config.get("subtitle_stroke_enabled", True)),
+            "stroke_color": subtitle_config.get("stroke_color", config.get("subtitle_stroke_color", "#000000")),
+            "stroke_opacity": subtitle_config.get("stroke_opacity", config.get("subtitle_stroke_opacity", 1.0)),
+            "stroke_width": subtitle_config.get("stroke_width", config.get("subtitle_stroke_width", 5)),
+            "vertical_percent": subtitle_config.get("vertical_percent", config.get("subtitle_vertical_percent", 12)),
+            "max_width_percent": subtitle_config.get("max_width_percent", config.get("subtitle_max_width_percent", 86)),
+        }
 
         folder_path_list = utils.get_sorted_absolute_subdirectories(video_folder_path)
         voice_folder_path_list = utils.get_sorted_absolute_subdirectories(voice_folder_path)
@@ -541,6 +617,7 @@ def batch_multiple_video_voice_bgm_generation(config_file_dir):
         print(f'voice_folder_path_list:{voice_folder_path_list}')
 
         # generated_quantity = 5
+        print(f'总共制作视频：{generated_quantity}条')
         for i in range(generated_quantity):
             # multiple_video_generation()
             multiple_video_voice_bgm_generation(project_name=project_name,
@@ -552,7 +629,14 @@ def batch_multiple_video_voice_bgm_generation(config_file_dir):
                                       bgm_volumex=bgm_volumex,
                                       clip_size=clip_size,
                                       fps=fps,
-                                      voice_folder_path_list=voice_folder_path_list)
+                                      voice_folder_path_list=voice_folder_path_list,
+                                      subtitle_enabled=subtitle_enabled,
+                                      subtitle_filename=subtitle_filename,
+                                      subtitle_style=subtitle_style,
+                                      split_on_comma=split_on_comma,
+                                      split_timing_mode=split_timing_mode,
+                                      speech_key=speech_key,
+                                      service_region=service_region)
 
 
 
