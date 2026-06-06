@@ -15,6 +15,18 @@
         "speech_key": "${AZURE_SPEECH_KEY}",
         "service_region": "southeastasia"
     },
+    "speech_recognition": {
+        "backend": "local_paraformer",
+        "primary_model": "paraformer-zh",
+        "punctuation_model": "ct-punc",
+        "fallback_models": ["small", "base"],
+        "minimum_cuda_memory_gb": 6,
+        "model_cache_dir": "%LOCALAPPDATA%\\video_edit\\models\\asr",
+        "download_progress": "auto",
+        "convert_to_simplified": true,
+        "fallback_hotwords": ["赫学熊", "防寒服"],
+        "hotwords": ["赫学熊", "防寒服", "防风", "防水", "保暖", "内胆"]
+    },
     "number_of_video_list": [1, 2, 2, 2, 2, 2, 1],
     "generated_quantity": 5
 }

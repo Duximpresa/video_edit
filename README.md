@@ -91,6 +91,60 @@ python generate_subtitle_maps.py --config "config\索罗娜\索罗娜短袖.json
 python generate_subtitle_maps.py --voice-root "input\赫学熊\索罗娜短袖\audio" --overwrite
 ```
 
+### 本地语音识别
+
+字幕映射生成器支持完全本地运行。项目配置加入 `speech_recognition`：
+
+```json
+"speech_recognition": {
+  "backend": "local_paraformer",
+  "primary_model": "paraformer-zh",
+  "punctuation_model": "ct-punc",
+  "fallback_models": ["small", "base"],
+  "minimum_cuda_memory_gb": 6,
+  "model_cache_dir": "%LOCALAPPDATA%\\video_edit\\models\\asr",
+  "download_progress": "auto",
+  "convert_to_simplified": true,
+  "fallback_hotwords": ["赫学熊", "索罗娜"],
+  "hotwords": ["赫学熊", "索罗娜", "凉感", "吸湿排汗", "抗菌", "含棉量", "氨纶"]
+}
+```
+
+- `backend`：`local_paraformer` 使用本地模型；`azure` 使用原有在线识别。
+- `primary_model`：中文主模型，默认 `paraformer-zh`。
+- `punctuation_model`：本地标点恢复模型，默认 `ct-punc`，用于自动生成逗号、问号等。
+- `fallback_models`：主模型加载或推理失败后，按顺序尝试 faster-whisper INT8 模型。
+- `minimum_cuda_memory_gb`：最低显存要求，默认 `6`，对应 GTX 1060 6GB。
+- `model_cache_dir`：模型下载位置，默认位于用户目录，不提交到 Git。
+- `download_progress`：`auto` 在普通 IDE 控制台隐藏刷屏进度，在终端中单行刷新；也可设为 `show` 或 `quiet`。
+- `convert_to_simplified`：将 Whisper 的繁体中文输出转换为简体，默认开启。
+- `fallback_hotwords`：仅给 Whisper 回退模型的少量品牌提示；不要放大量功能词，避免误插。
+- `hotwords`：品牌、商品、材质等业务词。仅 Paraformer 使用热词。
+
+`AUDIO_ROOT` 与 `CONFIG_PATH` 应指向同一个项目，否则可能把另一个商品的热词用于当前音频。
+
+GTX 1060 使用单文件、`batch_size=1`，不会强制开启依赖 Tensor Core 的 FP16。
+RTX 3060 等新显卡使用相同主模型，保证字幕结果一致。Paraformer 失败或 CUDA
+显存不足时，程序依次尝试 faster-whisper `small`、`base` 的 INT8 GPU 推理。
+回退模型只使用 `fallback_hotwords` 作为保守提示，不保证达到 Paraformer 的热词增强效果。
+本方案不自动回退 CPU；未检测到 CUDA 或显存不足 6GB 时会明确报错。
+
+首次运行需要联网下载模型，下载完成后可以断网识别。安装依赖：
+
+```powershell
+pip install -r requirements.txt
+pip install -r requirements-local-asr.txt
+```
+
+本地识别依赖固定使用 PyTorch CUDA 12.6，这是为了继续支持 GTX 1060 所属的
+Pascal 架构。不要只从普通 PyPI 安装 `torch`，否则 Windows 上可能得到 CPU 版本，
+导致 Paraformer 无法使用显卡。
+
+本地识别会在 `subtitles.json` 中记录实际模型、设备、耗时和时间戳。字幕逗号分段
+会优先复用这些时间戳，不再重复调用 Azure；时间戳无法匹配时才使用原有回退逻辑。
+Paraformer 输出中的中文字间空格会自动清理。为方便人工查看，`recognition` 不重复保存
+字幕全文，时间戳使用紧凑格式 `["文字", 开始毫秒, 结束毫秒]`；程序仍兼容旧对象格式。
+
 ### 字幕分段缓存
 
 `subtitles.json` 仍然兼容原来的简单写法：

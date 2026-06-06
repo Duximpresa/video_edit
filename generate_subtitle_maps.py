@@ -43,6 +43,7 @@ def main():
 
     config = load_config(args.config)
     voice_config = config["voice_config"]
+    recognition_config = config.get("speech_recognition", {"backend": "azure"})
     voice_root = Path(args.voice_root or config["voice_folder_path"])
 
     written_files = generate_subtitle_maps(
@@ -51,6 +52,7 @@ def main():
         service_region=voice_config["service_region"],
         overwrite=args.overwrite,
         language=args.language,
+        recognition_config=recognition_config,
     )
 
     print("字幕映射生成完成")

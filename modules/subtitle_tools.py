@@ -4,6 +4,7 @@ import re
 import subprocess
 import tempfile
 import time
+from copy import deepcopy
 from pathlib import Path
 
 try:
@@ -71,8 +72,7 @@ def _write_json_safely(path, payload):
             dir=path.parent,
             delete=False,
         ) as temp_file:
-            json.dump(payload, temp_file, ensure_ascii=False, indent=2)
-            temp_file.write("\n")
+            temp_file.write(_serialize_subtitle_payload(payload))
             temp_path = Path(temp_file.name)
         os.replace(temp_path, path)
     finally:
@@ -80,13 +80,39 @@ def _write_json_safely(path, payload):
             temp_path.unlink()
 
 
+def _serialize_subtitle_payload(payload):
+    serializable = deepcopy(payload)
+    replacements = {}
+    items = serializable.get("items", {}) if isinstance(serializable, dict) else {}
+    for index, item in enumerate(items.values()):
+        if not isinstance(item, dict):
+            continue
+        recognition = item.get("recognition")
+        if not isinstance(recognition, dict) or not isinstance(recognition.get("timestamps"), list):
+            continue
+        marker = f"__COMPACT_TIMESTAMPS_{index}__"
+        replacements[marker] = json.dumps(
+            recognition["timestamps"],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        recognition["timestamps"] = marker
+
+    content = json.dumps(serializable, ensure_ascii=False, indent=2)
+    for marker, compact_json in replacements.items():
+        content = content.replace(json.dumps(marker), compact_json)
+    return content + "\n"
+
+
 def _normalize_subtitle_item(item):
     if isinstance(item, dict):
-        text = str(item.get("text", "") or "").strip()
-        splits = item.get("splits", {})
+        normalized = dict(item)
+        normalized["text"] = str(item.get("text", "") or "").strip()
+        splits = normalized.get("splits", {})
         if not isinstance(splits, dict):
             splits = {}
-        return {"text": text, "splits": splits}
+        normalized["splits"] = splits
+        return normalized
 
     return {"text": str(item or "").strip(), "splits": {}}
 
@@ -264,6 +290,75 @@ def _speech_timestamp_ratio_segments(audio_path, full_text, parts, speech_key, s
     return segments
 
 
+def _cached_timestamp_ratio_segments(item, parts):
+    recognition = item.get("recognition", {})
+    timestamps = recognition.get("timestamps", []) if isinstance(recognition, dict) else []
+    if not timestamps:
+        raise RuntimeError("字幕映射中没有本地识别时间戳")
+
+    word_offsets = []
+    for timestamp in timestamps:
+        if isinstance(timestamp, dict):
+            timestamp_text = timestamp.get("text", "")
+            start_ms = timestamp.get("start_ms", 0)
+            end_ms = timestamp.get("end_ms", 0)
+        elif isinstance(timestamp, (list, tuple)) and len(timestamp) >= 3:
+            timestamp_text, start_ms, end_ms = timestamp[:3]
+        else:
+            continue
+
+        text = _clean_for_alignment(timestamp_text)
+        if not text:
+            continue
+        word_offsets.append({
+            "text": text,
+            "start": float(start_ms) / 1000,
+            "end": float(end_ms) / 1000,
+        })
+    if not word_offsets:
+        raise RuntimeError("字幕映射中的本地识别时间戳无效")
+
+    recognized_text = "".join(item["text"] for item in word_offsets)
+    audio_start = word_offsets[0]["start"]
+    audio_end = word_offsets[-1]["end"]
+    duration = audio_end - audio_start
+    if duration <= 0:
+        raise RuntimeError("本地识别时间戳时长无效")
+
+    segments = []
+    search_start = 0
+    for part in parts:
+        target = _clean_for_alignment(part)
+        char_start = recognized_text.find(target, search_start)
+        if char_start < 0:
+            raise RuntimeError(f"本地时间戳无法匹配字幕片段：{part}")
+        char_end = char_start + len(target)
+        search_start = char_end
+
+        cursor = 0
+        matched = []
+        for word in word_offsets:
+            word_start = cursor
+            word_end = cursor + len(word["text"])
+            cursor = word_end
+            if word_end <= char_start:
+                continue
+            if word_start >= char_end:
+                break
+            matched.append(word)
+        if not matched:
+            raise RuntimeError(f"本地时间戳没有匹配到字幕片段：{part}")
+        segments.append({
+            "text": part,
+            "start_ratio": _clamp((matched[0]["start"] - audio_start) / duration, 0, 1),
+            "end_ratio": _clamp((matched[-1]["end"] - audio_start) / duration, 0, 1),
+        })
+
+    segments[0]["start_ratio"] = 0.0
+    segments[-1]["end_ratio"] = 1.0
+    return segments
+
+
 def _valid_cached_segments(cached_segments, parts):
     if not isinstance(cached_segments, list) or len(cached_segments) != len(parts):
         return False
@@ -287,9 +382,7 @@ def _write_split_cache(audio_folder, filename, audio_name, item, mode, segments)
     payload["version"] = max(int(payload.get("version", 1) or 1), 2)
 
     subtitle_file = _subtitle_file_path(audio_folder, filename)
-    with subtitle_file.open("w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
-        f.write("\n")
+    _write_json_safely(subtitle_file, payload)
 
 
 def _map_ratios_to_timeline(start, end, ratio_segments):
@@ -345,13 +438,16 @@ def build_subtitle_segments(
     actual_mode = mode
     try:
         if mode == "speech_timestamps":
-            ratio_segments = _speech_timestamp_ratio_segments(
-                audio_file,
-                text,
-                parts,
-                speech_key,
-                service_region,
-            )
+            try:
+                ratio_segments = _cached_timestamp_ratio_segments(item, parts)
+            except Exception:
+                ratio_segments = _speech_timestamp_ratio_segments(
+                    audio_file,
+                    text,
+                    parts,
+                    speech_key,
+                    service_region,
+                )
         else:
             ratio_segments = _ratio_segments_from_parts(parts)
     except Exception as exc:
@@ -443,12 +539,13 @@ def _convert_audio_to_temp_wav(audio_path):
 
 def generate_subtitle_maps(
     voice_root,
-    speech_key,
-    service_region,
+    speech_key=None,
+    service_region=None,
     subtitle_filename=DEFAULT_SUBTITLE_FILE,
     overwrite=False,
     language="zh-CN",
     return_report=False,
+    recognition_config=None,
 ):
     voice_root = Path(voice_root)
     if not voice_root.exists():
@@ -468,6 +565,12 @@ def generate_subtitle_maps(
     failed_files = []
     recognized_count = 0
     skipped_count = 0
+    recognition_config = dict(recognition_config or {})
+    recognition_backend = recognition_config.get("backend", "azure")
+    local_recognizer = None
+    if recognition_backend not in {"azure", "local_paraformer"}:
+        raise ValueError(f"不支持的语音识别后端：{recognition_backend}")
+
     for audio_folder in audio_folders:
         audio_files = [
             p for p in sorted(audio_folder.iterdir())
@@ -488,7 +591,7 @@ def generate_subtitle_maps(
                 skipped_count += 1
                 continue
 
-            if not speech_key or not service_region:
+            if recognition_backend == "azure" and (not speech_key or not service_region):
                 raise RuntimeError(
                     "存在需要转写的音频，但缺少 Azure Speech 配置。"
                     "请设置 AZURE_SPEECH_KEY 环境变量，并确认配置文件中的 "
@@ -497,14 +600,24 @@ def generate_subtitle_maps(
 
             print(f"转写音频：{audio_file.name}")
             try:
-                text = transcribe_audio_file(
-                    audio_file,
-                    speech_key,
-                    service_region,
-                    language=language,
-                )
+                recognition = None
+                if recognition_backend == "local_paraformer":
+                    if local_recognizer is None:
+                        from modules.local_asr import LocalSpeechRecognizer
+
+                        local_recognizer = LocalSpeechRecognizer(recognition_config)
+                    recognition = local_recognizer.transcribe(audio_file, language=language)
+                    text = recognition.text
+                else:
+                    text = transcribe_audio_file(
+                        audio_file,
+                        speech_key,
+                        service_region,
+                        language=language,
+                    )
             except Exception as exc:
                 text = ""
+                recognition = None
                 print(f"转写异常：{audio_file}，原因：{exc}")
 
             text = str(text or "").strip()
@@ -513,10 +626,12 @@ def generate_subtitle_maps(
             else:
                 failed_files.append(str(audio_file))
 
-            if isinstance(existing_item, dict):
-                updated_item = dict(existing_item)
+            if isinstance(existing_item, dict) or recognition is not None:
+                updated_item = dict(existing_item) if isinstance(existing_item, dict) else {}
                 updated_item["text"] = text
                 updated_item.pop("splits", None)
+                if recognition is not None:
+                    updated_item["recognition"] = recognition.to_dict()
                 items[audio_file.name] = updated_item
                 payload["version"] = max(int(payload.get("version", 1) or 1), 2)
             else:

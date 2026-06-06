@@ -9,7 +9,7 @@ from modules.subtitle_tools import generate_subtitle_maps
 
 # 修改下面几项后，直接在 IDE 中运行本文件。
 AUDIO_ROOT = Path(r"input/赫学熊/防寒服/2024-_11_02/audio")
-CONFIG_PATH = Path(r"config\索罗娜\索罗娜短袖.json")
+CONFIG_PATH = Path(r"config\赫学熊_防寒服.json")
 OVERWRITE = False
 LANGUAGE = "zh-CN"
 SUBTITLE_FILENAME = "subtitles.json"
@@ -26,6 +26,7 @@ def run():
         config = json.load(config_file)
 
     voice_config = config["voice_config"]
+    recognition_config = config.get("speech_recognition", {"backend": "azure"})
     report = generate_subtitle_maps(
         voice_root=AUDIO_ROOT,
         speech_key=_resolve_config_value(voice_config.get("speech_key")),
@@ -34,6 +35,7 @@ def run():
         overwrite=OVERWRITE,
         language=LANGUAGE,
         return_report=True,
+        recognition_config=recognition_config,
     )
 
     print("\n本次处理结果")
