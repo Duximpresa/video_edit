@@ -58,6 +58,28 @@ def _load_subtitle_payload(audio_folder, filename=DEFAULT_SUBTITLE_FILE):
     return {"version": 2, "items": {}}
 
 
+def _write_json_safely(path, payload):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            suffix=".tmp",
+            prefix=f"{path.stem}_",
+            dir=path.parent,
+            delete=False,
+        ) as temp_file:
+            json.dump(payload, temp_file, ensure_ascii=False, indent=2)
+            temp_file.write("\n")
+            temp_path = Path(temp_file.name)
+        os.replace(temp_path, path)
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink()
+
+
 def _normalize_subtitle_item(item):
     if isinstance(item, dict):
         text = str(item.get("text", "") or "").strip()
@@ -426,51 +448,111 @@ def generate_subtitle_maps(
     subtitle_filename=DEFAULT_SUBTITLE_FILE,
     overwrite=False,
     language="zh-CN",
+    return_report=False,
 ):
     voice_root = Path(voice_root)
-    audio_folders = [p for p in sorted(voice_root.iterdir()) if p.is_dir()]
-    if any(voice_root.glob("*.mp3")) or any(voice_root.glob("*.m4a")):
-        audio_folders.insert(0, voice_root)
+    if not voice_root.exists():
+        raise FileNotFoundError(f"音频根目录不存在：{voice_root}")
+    if not voice_root.is_dir():
+        raise NotADirectoryError(f"音频根路径不是文件夹：{voice_root}")
+
+    audio_folders = []
+    for folder in [voice_root, *sorted(path for path in voice_root.rglob("*") if path.is_dir())]:
+        if any(
+            path.is_file() and path.suffix.lower() in AUDIO_EXTENSIONS
+            for path in folder.iterdir()
+        ):
+            audio_folders.append(folder)
 
     written_files = []
+    failed_files = []
+    recognized_count = 0
+    skipped_count = 0
     for audio_folder in audio_folders:
         audio_files = [
             p for p in sorted(audio_folder.iterdir())
             if p.is_file() and p.suffix.lower() in AUDIO_EXTENSIONS
         ]
-        if not audio_files:
-            continue
 
         subtitle_path = audio_folder / subtitle_filename
-        if subtitle_path.exists():
-            with subtitle_path.open("r", encoding="utf-8") as f:
-                data = json.load(f)
-            items = data.get("items", data if isinstance(data, dict) else {})
-        else:
-            items = {}
+        payload = _load_subtitle_payload(audio_folder, subtitle_filename)
+        items = payload.setdefault("items", {})
+        changed = not subtitle_path.exists()
 
         print(f"开始生成字幕映射：{audio_folder}")
         for audio_file in audio_files:
-            if not overwrite and audio_file.name in items and items[audio_file.name]:
+            existing_item = items.get(audio_file.name)
+            existing_text = _normalize_subtitle_item(existing_item)["text"]
+            if not overwrite and existing_text:
                 print(f"跳过已有字幕：{audio_file.name}")
+                skipped_count += 1
                 continue
 
+            if not speech_key or not service_region:
+                raise RuntimeError(
+                    "存在需要转写的音频，但缺少 Azure Speech 配置。"
+                    "请设置 AZURE_SPEECH_KEY 环境变量，并确认配置文件中的 "
+                    "service_region 正确。"
+                )
+
             print(f"转写音频：{audio_file.name}")
-            items[audio_file.name] = transcribe_audio_file(
-                audio_file,
-                speech_key,
-                service_region,
-                language=language,
-            )
+            try:
+                text = transcribe_audio_file(
+                    audio_file,
+                    speech_key,
+                    service_region,
+                    language=language,
+                )
+            except Exception as exc:
+                text = ""
+                print(f"转写异常：{audio_file}，原因：{exc}")
 
-        payload = {"version": 1, "items": items}
-        with subtitle_path.open("w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
-            f.write("\n")
-        written_files.append(str(subtitle_path))
-        print(f"已写入字幕映射：{subtitle_path}")
+            text = str(text or "").strip()
+            if text:
+                recognized_count += 1
+            else:
+                failed_files.append(str(audio_file))
 
-    return written_files
+            if isinstance(existing_item, dict):
+                updated_item = dict(existing_item)
+                updated_item["text"] = text
+                updated_item.pop("splits", None)
+                items[audio_file.name] = updated_item
+                payload["version"] = max(int(payload.get("version", 1) or 1), 2)
+            else:
+                items[audio_file.name] = text
+            changed = True
+
+        if changed:
+            _write_json_safely(subtitle_path, payload)
+            written_files.append(str(subtitle_path))
+            print(f"已写入字幕映射：{subtitle_path}")
+        else:
+            print(f"字幕映射无需更新：{subtitle_path}")
+
+    report = {
+        "voice_root": str(voice_root),
+        "audio_folder_count": len(audio_folders),
+        "audio_file_count": recognized_count + skipped_count + len(failed_files),
+        "recognized_count": recognized_count,
+        "skipped_count": skipped_count,
+        "failed_count": len(failed_files),
+        "failed_files": failed_files,
+        "written_files": written_files,
+    }
+    print(
+        "字幕映射处理完成："
+        f"文件夹 {report['audio_folder_count']} 个，"
+        f"识别成功 {recognized_count} 个，"
+        f"跳过 {skipped_count} 个，"
+        f"失败 {len(failed_files)} 个"
+    )
+    if failed_files:
+        print("以下音频未识别出文字，可稍后重新运行或手工补充：")
+        for failed_file in failed_files:
+            print(f"- {failed_file}")
+
+    return report if return_report else written_files
 
 
 def _find_font(font_name=None):

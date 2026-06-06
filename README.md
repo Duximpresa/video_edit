@@ -55,6 +55,42 @@
 
 Azure Speech 密钥不要写入 Git。配置中的 `speech_key` 可以写成 `${AZURE_SPEECH_KEY}`，运行前在系统环境变量中设置真实密钥即可。
 
+### 一键生成字幕映射
+
+如果不想手工填写每个音频文件夹里的 `subtitles.json`，可以运行根目录的
+`generate_subtitles_for_folder.py`。先修改文件顶部的参数：
+
+```python
+AUDIO_ROOT = Path(r"input\赫学熊\索罗娜短袖\audio")
+CONFIG_PATH = Path(r"config\索罗娜\索罗娜短袖.json")
+OVERWRITE = False
+LANGUAGE = "zh-CN"
+SUBTITLE_FILENAME = "subtitles.json"
+```
+
+- `AUDIO_ROOT`：需要识别的音频根目录。程序会递归扫描全部子目录。
+- `CONFIG_PATH`：提供 Azure Speech 区域和密钥配置的项目 JSON。
+- `OVERWRITE`：默认 `False`，保留已有人工字幕，只补充缺失或空白项；设为 `True` 时重新识别。
+- `LANGUAGE`：Azure Speech 识别语言，中文默认使用 `zh-CN`。
+- `SUBTITLE_FILENAME`：每个含音频目录中生成的字幕映射文件名。
+
+PowerShell 临时设置 Azure Speech 密钥后，可以直接在 IDE 中运行脚本：
+
+```powershell
+$env:AZURE_SPEECH_KEY="你的 Azure Speech 密钥"
+```
+
+程序支持 `.mp3`、`.aac`、`.acc`、`.m4a` 和 `.wav`。单个音频失败不会中断整批任务，
+完成后会汇总扫描、成功、跳过和失败数量。覆盖新版对象格式字幕时会更新 `text` 并移除
+已经失效的 `splits` 缓存，其他自定义字段会保留。
+
+原有命令行入口仍可使用：
+
+```powershell
+python generate_subtitle_maps.py --config "config\索罗娜\索罗娜短袖.json"
+python generate_subtitle_maps.py --voice-root "input\赫学熊\索罗娜短袖\audio" --overwrite
+```
+
 ### 字幕分段缓存
 
 `subtitles.json` 仍然兼容原来的简单写法：
