@@ -34,7 +34,7 @@
         "filename": "subtitles.json",
         "split_on_comma": true,
         "split_timing_mode": "speech_timestamps",
-        "font": "新青年体.ttf",
+        "font": "SourceHanSansSC-Bold.otf",
         "font_size": 42,
         "letter_spacing": 1,
         "color": "#FFFFFF",

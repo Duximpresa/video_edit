@@ -2,6 +2,7 @@ import os
 import random
 from moviepy import VideoFileClip, concatenate_videoclips
 from moviepy import *
+from moviepy.audio.fx import AudioLoop
 # from moviepy.audio.io import AudioFileClip
 from datetime import datetime
 from app import voice
@@ -353,7 +354,7 @@ def multiple_video_voice_bgm_generation(project_name,
     # 配音和BGM进行混音
     audio_clip = AudioFileClip(voice_filename) * (audio_volumex)
     bgm_clip = AudioFileClip(bgm_file_path) * (bgm_volumex)
-    # bgm_clip = afx.audio_loop(bgm_clip, duration=audio_clip.duration)
+    # bgm_clip = bgm_clip.with_effects([AudioLoop(duration=audio_clip.duration)])
     # bgm_clip = bgm_clip.with_start(0)
     composite_audio = CompositeAudioClip([audio_clip, bgm_clip])
     # composite_audio.write_audiofile('test.mp3', codec='libmp3lame', fps=audio_clip.fps)
@@ -387,7 +388,7 @@ def multiple_video_voice_bgm_generation(project_name,
     print(f'音频长度：{audio_clip.duration}')
 
     if final_clip_duration > audio_clip.duration:
-        bgm_clip = afx.audio_loop(bgm_clip, duration=final_clip_duration)
+        bgm_clip = bgm_clip.with_effects([AudioLoop(duration=final_clip_duration)])
         bgm_clip = bgm_clip.with_start(0)
         composite_audio = CompositeAudioClip([audio_clip, bgm_clip])
         final_clip = final_clip.with_audio(composite_audio)
@@ -478,7 +479,7 @@ def hexuexiong_multiple_video(project_name,
     # audio_clip = AudioFileClip(final_clip) * (audio_volumex)
     bgm_clip = AudioFileClip(bgm_file_path) * (bgm_volumex)
 
-    bgm_clip = afx.audio_loop(bgm_clip, duration=final_clip_duration)
+    bgm_clip = bgm_clip.with_effects([AudioLoop(duration=final_clip_duration)])
     bgm_clip = bgm_clip.with_start(0)
 
     composite_audio = CompositeAudioClip([audio_clip, bgm_clip])
@@ -579,7 +580,7 @@ def main2():
     voice_filename = 'storage/Voices/测试项目_fabdf1707ce6133379d73e94ba529f52650ba0378fdaed2b6eb0e8cefde052b7.wav'
     audio_clip = AudioFileClip(voice_filename) * (audio_volumex)
     bgm_clip = AudioFileClip(bgm_file_path) * (bgm_volumex)
-    bgm_clip = afx.audio_loop(bgm_clip, duration=audio_clip.duration)
+    bgm_clip = bgm_clip.with_effects([AudioLoop(duration=audio_clip.duration)])
     bgm_clip = bgm_clip.with_start(0)
     # composite_audio = CompositeAudioClip([audio_clip, bgm_clip])
     # composite_audio.write_audiofile('test.mp3', codec='libmp3lame', fps=audio_clip.fps)

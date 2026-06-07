@@ -9,8 +9,7 @@ root_dir = utils.root_dir()
 
 speech_key = os.getenv("AZURE_SPEECH_KEY", "")
 service_region = "southeastasia"
-speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=service_region)
-speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Riff44100Hz16BitMonoPcm)
+speech_config = None
 # audio_config = speechsdk.audio.AudioOutputConfig()
 voice_name_list = ["zh-CN-XiaoxiaoNeural",
                    "zh-CN-XiaochenNeural",
@@ -20,6 +19,19 @@ voice_name_list = ["zh-CN-XiaoxiaoNeural",
                    "zh-CN-XiaoqiuNeural",
                    "zh-CN-guangxi-YunqiNeural",
                    "zh-CN-XiaoxiaoMultilingualNeural"]
+
+
+def create_speech_config():
+    key = os.getenv("AZURE_SPEECH_KEY", "")
+    if not key:
+        raise RuntimeError(
+            "缺少 Azure Speech 密钥，请设置 AZURE_SPEECH_KEY 环境变量"
+        )
+    config = speechsdk.SpeechConfig(subscription=key, region=service_region)
+    config.set_speech_synthesis_output_format(
+        speechsdk.SpeechSynthesisOutputFormat.Riff44100Hz16BitMonoPcm
+    )
+    return config
 
 
 # speech_config.speech_synthesis_voice_name = voice_name_list[7]
@@ -70,6 +82,7 @@ def text2speech(voice_txt_file, voice_name, project_name, speech_config, voice_s
     # datetime_string = utils.generate_datetime_string()
     voice_filename = f"{voice_storage}/{project_name}_{hash_code}.wav"
     if not os.path.exists(voice_filename):
+        speech_config = speech_config or create_speech_config()
         speech_config.speech_synthesis_voice_name = voice_name
         audio_config = speechsdk.audio.AudioOutputConfig(filename=voice_filename)
         synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
