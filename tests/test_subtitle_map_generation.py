@@ -12,9 +12,11 @@ from modules.subtitle_tools import (
 )
 from modules.local_asr import (
     LocalSpeechRecognizer,
+    PROJECT_ROOT,
     TranscriptionResult,
     _compact_chinese_spacing,
     _configure_download_progress,
+    _expand_path,
     detect_cuda_device,
 )
 
@@ -178,6 +180,12 @@ class SubtitleMapGenerationTests(unittest.TestCase):
         ), patch.dict("os.environ", {}, clear=False):
             _configure_download_progress("auto")
             self.assertEqual(os.environ["TQDM_DISABLE"], "1")
+
+    def test_relative_model_cache_is_resolved_from_project_root(self):
+        self.assertEqual(
+            _expand_path(r"models\asr"),
+            (PROJECT_ROOT / "models" / "asr").resolve(),
+        )
 
     def test_recognition_metadata_uses_compact_timestamps(self):
         result = TranscriptionResult(

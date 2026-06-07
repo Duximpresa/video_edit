@@ -14,3 +14,10 @@ __pycache__/
 *TEMP_MPY_wvf_snd.mp4
 *_subtitle_video_tmp.mp4
 *_subtitle_mux_tmp.mp4
+
+# Local speech-recognition model weights
+models/*
+!models/README.md
+!models/asr/
+models/asr/*
+!models/asr/.gitkeep

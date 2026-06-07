@@ -10,6 +10,7 @@ from pathlib import Path
 
 MINIMUM_CUDA_MEMORY_GB = 6.0
 _DOWNLOAD_PROGRESS_CONFIGURED = None
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 @dataclass
@@ -36,7 +37,10 @@ class TranscriptionResult:
 
 def _expand_path(value):
     value = os.path.expandvars(os.path.expanduser(str(value)))
-    return Path(value)
+    path = Path(value)
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    return path.resolve()
 
 
 def _cuda_info_from_torch():
@@ -196,10 +200,11 @@ class LocalSpeechRecognizer:
         self.cache_dir = _expand_path(
             config.get(
                 "model_cache_dir",
-                r"%LOCALAPPDATA%\video_edit\models\asr",
+                r"models\asr",
             )
         )
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        print(f"本地语音模型目录：{self.cache_dir}")
         self.device_info = detect_cuda_device(self.minimum_memory_gb)
         self.device = "cuda:0"
         self._paraformer = None

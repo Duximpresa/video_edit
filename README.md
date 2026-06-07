@@ -102,7 +102,7 @@ python generate_subtitle_maps.py --voice-root "input\赫学熊\索罗娜短袖\a
   "punctuation_model": "ct-punc",
   "fallback_models": ["small", "base"],
   "minimum_cuda_memory_gb": 6,
-  "model_cache_dir": "%LOCALAPPDATA%\\video_edit\\models\\asr",
+  "model_cache_dir": "models\\asr",
   "download_progress": "auto",
   "convert_to_simplified": true,
   "fallback_hotwords": ["赫学熊", "索罗娜"],
@@ -115,8 +115,14 @@ python generate_subtitle_maps.py --voice-root "input\赫学熊\索罗娜短袖\a
 - `punctuation_model`：本地标点恢复模型，默认 `ct-punc`，用于自动生成逗号、问号等。
 - `fallback_models`：主模型加载或推理失败后，按顺序尝试 faster-whisper INT8 模型。
 - `minimum_cuda_memory_gb`：最低显存要求，默认 `6`，对应 GTX 1060 6GB。
-- `model_cache_dir`：模型下载位置，默认位于用户目录，不提交到 Git。
+- `model_cache_dir`：模型下载位置。相对路径从项目根目录计算，默认下载到
+  `models/asr`。Git 只保留 `models` 目录结构和说明文件，实际模型权重不会提交。
 - `download_progress`：`auto` 在普通 IDE 控制台隐藏刷屏进度，在终端中单行刷新；也可设为 `show` 或 `quiet`。
+
+运行 `generate_subtitles_for_folder.py` 时，如果存在需要识别的音频，程序会自动
+检查并下载缺少的 Paraformer、标点或 faster-whisper 回退模型。模型下载一次后
+会复用 `models/asr` 中的缓存；如果所有字幕都已存在且 `OVERWRITE = False`，
+程序会直接跳过识别，因此不会加载或下载模型。
 - `convert_to_simplified`：将 Whisper 的繁体中文输出转换为简体，默认开启。
 - `fallback_hotwords`：仅给 Whisper 回退模型的少量品牌提示；不要放大量功能词，避免误插。
 - `hotwords`：品牌、商品、材质等业务词。仅 Paraformer 使用热词。

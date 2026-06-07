@@ -21,7 +21,7 @@
         "punctuation_model": "ct-punc",
         "fallback_models": ["small", "base"],
         "minimum_cuda_memory_gb": 6,
-        "model_cache_dir": "%LOCALAPPDATA%\\video_edit\\models\\asr",
+        "model_cache_dir": "models\\asr",
         "download_progress": "auto",
         "convert_to_simplified": true,
         "fallback_hotwords": ["赫学熊", "索罗娜"],
