@@ -12,6 +12,7 @@
 ```json
 "subtitle_config": {
   "enabled": true,
+  "render_mode": "legacy_opencv",
   "filename": "subtitles.json",
   "split_on_comma": true,
   "split_timing_mode": "speech_timestamps",
@@ -32,9 +33,10 @@
 字段说明：
 
 - `enabled`：是否启用字幕。`true` 表示导出后内嵌字幕，`false` 表示不处理字幕。
+- `render_mode`：字幕渲染方式。`legacy_opencv` 保留原有 OpenCV/Pillow 二次烧录；`single_pass_ass` 使用 FFmpeg/libass 在最终输出时一次编码完成字幕。
 - `filename`：每个音频片段文件夹中的字幕映射文件名，默认是 `subtitles.json`。
-- `split_on_comma`：是否按中文逗号 `，` 和英文逗号 `,` 自动拆分字幕。`true` 表示拆分，`false` 表示整句显示。
-- `split_timing_mode`：逗号拆分后的计时方式。`character_ratio` 按字数比例分配片段时长；`speech_timestamps` 优先使用 Azure Speech 语音时间戳，失败时自动退回字数比例。
+- `split_on_comma`：是否按中文/英文逗号 `，`、`,` 和句号 `。`、`.` 自动拆分字幕。字段名为兼容旧配置而保留；`true` 表示遇到这些标点时拆分，`false` 表示整句显示。
+- `split_timing_mode`：标点拆分后的计时方式。`character_ratio` 按字数比例分配片段时长；`speech_timestamps` 优先使用语音时间戳，失败时自动退回字数比例。
 - `font`：字幕字体文件名，只从项目根目录的 `font/` 文件夹中读取。
 - `font_size`：字幕字号，数值越大字幕越大。
 - `letter_spacing`：字间距，单位是像素。`0` 表示默认间距，数值越大每个字符之间越松。
@@ -53,7 +55,27 @@
 - `SourceHanSansSC-Bold.otf`
 - `SourceHanSansSC-Heavy.otf`
 
-注意：字幕显示时会自动去掉末尾的中文句号 `。` 和英文句号 `.`，但不会修改 `subtitles.json` 中保存的原始转写文字。
+注意：启用 `split_on_comma` 时，中文句号 `。` 和英文句号 `.` 会作为字幕分段边界且不显示；关闭拆分时也会移除句号。程序不会修改 `subtitles.json` 中保存的原始转写文字。
+
+### 视频渲染与批量并发
+
+未配置以下字段时，程序仍使用原有“串行 + OpenCV/Pillow”流程：
+
+```json
+"batch_render": {
+  "execution_mode": "serial",
+  "max_workers": 2,
+  "continue_on_error": true,
+  "base_seed": 20260607
+}
+```
+
+- `execution_mode`：`serial` 顺序生成；`parallel` 使用独立进程同时生成多条视频。
+- `max_workers`：并发进程数，仅 `parallel` 生效。RTX 3060 12GB 建议从 `2` 开始，GTX 1060 6GB 建议使用 `1`。
+- `continue_on_error`：当前必须为 `true`，单条失败会记录错误并继续其他任务。
+- `base_seed`：可选的批量随机种子。每条任务使用 `base_seed + task_index`，便于复现素材选择；不填写时每批自动生成。
+
+`single_pass_ass` 会检查 FFmpeg 是否包含 `ass/libass` 滤镜。检查失败或字体无法加载时，该条任务直接失败，不自动回退旧字幕流程。并发模式会为输出增加毫秒和任务编号，避免同秒重名，并为每条任务使用独立临时目录。
 
 Azure Speech 密钥不要写入 Git。配置中的 `speech_key` 可以写成 `${AZURE_SPEECH_KEY}`，运行前在系统环境变量中设置真实密钥即可。
 
@@ -166,7 +188,7 @@ Paraformer 输出中的中文字间空格会自动清理。为方便人工查看
 }
 ```
 
-当 `split_on_comma` 为 `true` 时，程序会在第一次使用某条音频字幕时自动计算分段，并把结果缓存回同一个 `subtitles.json`，后续相同模式会直接复用：
+当 `split_on_comma` 为 `true` 时，程序会按中英文逗号和句号分段，在第一次使用某条音频字幕时自动计算分段，并把结果缓存回同一个 `subtitles.json`，后续相同模式会直接复用：
 
 ```json
 {

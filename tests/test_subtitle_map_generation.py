@@ -9,6 +9,7 @@ from modules.subtitle_tools import (
     _serialize_subtitle_payload,
     build_subtitle_segments,
     generate_subtitle_maps,
+    normalize_subtitle_text,
 )
 from modules.local_asr import (
     LocalSpeechRecognizer,
@@ -27,6 +28,47 @@ class SubtitleMapGenerationTests(unittest.TestCase):
         path = folder / name
         path.write_bytes(b"test")
         return path
+
+    def test_removes_chinese_and_english_periods_everywhere(self):
+        self.assertEqual(
+            normalize_subtitle_text("前半句。后半句.结尾。"),
+            "前半句后半句结尾",
+        )
+
+    def test_split_uses_chinese_and_english_periods_as_boundaries(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            audio = self._audio_file(root, "voice.mp3")
+            (root / "subtitles.json").write_text(
+                json.dumps(
+                    {
+                        "version": 2,
+                        "items": {
+                            "voice.mp3": {
+                                "text": "第一句。第二句.第三句，第四句,第五句。",
+                                "splits": {},
+                            }
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            segments = build_subtitle_segments(
+                root,
+                audio,
+                0,
+                10,
+                split_timing_mode="character_ratio",
+            )
+
+            self.assertEqual(
+                [segment["text"] for segment in segments],
+                ["第一句", "第二句", "第三句", "第四句", "第五句"],
+            )
+            self.assertEqual(segments[0]["start"], 0)
+            self.assertEqual(segments[-1]["end"], 10)
 
     def test_recursively_generates_maps_and_continues_after_failure(self):
         with tempfile.TemporaryDirectory() as temp_dir:

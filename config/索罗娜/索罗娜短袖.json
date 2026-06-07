@@ -1,6 +1,6 @@
 {
     "project_name": "赫学熊混剪_索罗娜短袖",
-    "output_folder": "output\\赫学熊混剪\\索罗娜短袖\\索罗娜短袖_0605",
+    "output_folder": "output\\赫学熊混剪\\索罗娜短袖\\索罗娜短袖_0607",
     "bgm_folder_path": "BGM/赫学熊",
     "voice_folder_path": "input/赫学熊/索罗娜短袖/audio",
     "video_folder_path": "input/赫学熊/索罗娜短袖/video",
@@ -28,9 +28,10 @@
         "hotwords": ["赫学熊", "索罗娜", "凉感", "吸湿排汗", "抗菌", "含棉量", "氨纶"]
     },
     "number_of_video_list": [2, 2, 2, 2, 2, 2, 2],
-    "generated_quantity": 1,
+    "generated_quantity": 10,
     "subtitle_config": {
         "enabled": true,
+        "render_mode": "single_pass_ass",
         "filename": "subtitles.json",
         "split_on_comma": true,
         "split_timing_mode": "speech_timestamps",
@@ -45,5 +46,10 @@
         "stroke_width": 4,
         "vertical_percent": 30,
         "max_width_percent": 86
+    },
+    "batch_render": {
+        "execution_mode": "parallel",
+        "max_workers": 4,
+        "continue_on_error": true
     }
 }

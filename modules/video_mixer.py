@@ -1,6 +1,11 @@
 import os
 import random
+import tempfile
+import time
+import traceback
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from distutils.command.config import config
+from pathlib import Path
 
 from moviepy import VideoFileClip, concatenate_videoclips
 from moviepy import *
@@ -12,11 +17,16 @@ from utils import utils
 import azure.cognitiveservices.speech as speechsdk
 #pip install azure-cognitiveservices-speech
 # from moviepy.video import fx
-from concurrent.futures import ThreadPoolExecutor
-from multiprocessing import Process
 import psutil
 import json
-from modules.subtitle_tools import burn_subtitles_to_video, build_subtitle_segments, get_subtitle_text
+from modules.subtitle_tools import (
+    build_ass_ffmpeg_filter,
+    burn_subtitles_to_video,
+    build_subtitle_segments,
+    create_ass_subtitle_file,
+    ensure_ffmpeg_ass_filter,
+    get_subtitle_text,
+)
 
 root_dir = utils.root_dir()
 AUDIO_END_PADDING = 0.05
@@ -66,11 +76,15 @@ def generate_random_float(number, range_control):
     return random_float
 
 # 生成唯一文件名
-def generate_datetime_string(prefix):
+def generate_datetime_string(prefix, include_milliseconds=False, task_index=None):
     # 获取当前的日期和时间
     now = datetime.now()
     # 将日期和时间格式化为字符串
     datetime_string = now.strftime("%Y-%m-%d_%H-%M-%S")
+    if include_milliseconds:
+        datetime_string += f"-{now.microsecond // 1000:03d}"
+    if task_index is not None:
+        datetime_string += f"_task-{int(task_index) + 1:03d}"
     # 返回带有前缀的日期和时间字符串
     return f"{prefix}_{datetime_string}"
 
@@ -155,8 +169,7 @@ def multiple_video_bgm_generation(project_name,
                                         one_clip_duration,
                                   duration_of_video_list):
     # 检查输出文件夹
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
+    os.makedirs(output_folder, exist_ok=True)
 
     # 随机选择BGM
     bgm_file = get_bgm_list_choice(bgm_folder_path)
@@ -452,9 +465,25 @@ def multiple_video_voice_bgm_generation(project_name,
                               split_on_comma=True,
                               split_timing_mode="character_ratio",
                               speech_key=None,
-                              service_region=None):
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
+                              service_region=None,
+                              subtitle_render_mode="legacy_opencv",
+                              task_index=0,
+                              random_seed=None,
+                              parallel_mode=False):
+    started_at = time.perf_counter()
+    timings = {
+        "material_prepare": 0.0,
+        "audio_mix": 0.0,
+        "video_render": 0.0,
+        "subtitle_render": 0.0,
+        "total": 0.0,
+    }
+    if random_seed is not None:
+        random.seed(random_seed)
+    if subtitle_render_mode not in {"legacy_opencv", "single_pass_ass"}:
+        raise ValueError(f"不支持的字幕渲染模式：{subtitle_render_mode}")
+
+    os.makedirs(output_folder, exist_ok=True)
 
     #选择配音文件
     # voice_filename=voice_path_list[0]
@@ -513,7 +542,11 @@ def multiple_video_voice_bgm_generation(project_name,
     clips = [j for i in clips_list for j in i]
     for a in clips:
         print(a)
-    final_clip_name = generate_datetime_string(project_name)
+    final_clip_name = generate_datetime_string(
+        project_name,
+        include_milliseconds=parallel_mode,
+        task_index=task_index if parallel_mode else None,
+    )
     print(final_clip_name)
     output_file = f'{os.path.join(output_folder, final_clip_name)}.mp4'
     print(output_file)
@@ -523,9 +556,11 @@ def multiple_video_voice_bgm_generation(project_name,
     print(f'成片尺寸：{final_clip.size}')
     final_clip_duration = final_clip.duration
     print(f'视频长度：{final_clip_duration}')
+    timings["material_prepare"] = time.perf_counter() - started_at
     # print(f'音频长度：{audio_clip.duration}')
     # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="h264_nvenc", bitrate="20000k", fps=fps,audio_bitrate="320k")
 
+    audio_mix_started = time.perf_counter()
     audio_clip = scale_audio_volume(final_clip.audio, audio_volumex)
     # audio_clip = final_clip.audio
     print(audio_clip.duration)
@@ -540,103 +575,305 @@ def multiple_video_voice_bgm_generation(project_name,
 
     composite_audio = CompositeAudioClip([audio_clip, bgm_clip])
     final_clip = final_clip.with_audio(composite_audio)
+    timings["audio_mix"] = time.perf_counter() - audio_mix_started
     print(final_clip)
     print(f'最终成片尺寸：{final_clip.size}')
 
-    ffmpeg_params = [
-        "-pix_fmt", "yuv420p",  # 强制输出 YUV 像素格式
-        "-vf", "format=yuv420p", # 使用滤镜确保输入转换为 YUV
-        "-colorspace", "bt709",  # 指定色彩空间为 Rec.709
-        "-color_primaries", "bt709",  # 指定色彩原色
-        "-color_trc", "bt709",  # 指定传递特性（gamma）
-        "-color_range", "pc"  # 指定色彩范围（tv 表示有限范围，pc 表示全范围）
-    ]
+    video_filter = "format=yuv420p"
+    temp_prefix = f"video-edit-task-{int(task_index) + 1:03d}-"
+    try:
+        with tempfile.TemporaryDirectory(prefix=temp_prefix) as temp_dir:
+            if (
+                subtitle_enabled
+                and subtitle_render_mode == "single_pass_ass"
+                and subtitle_segments
+            ):
+                subtitle_started = time.perf_counter()
+                ensure_ffmpeg_ass_filter()
+                ass_result = create_ass_subtitle_file(
+                    subtitle_segments,
+                    subtitle_style,
+                    clip_size,
+                    Path(temp_dir) / "subtitles.ass",
+                )
+                if ass_result["event_count"] <= 0:
+                    raise RuntimeError("ASS 字幕没有可渲染的有效事件")
+                video_filter = build_ass_ffmpeg_filter(
+                    ass_result["path"],
+                    Path(ass_result["font_path"]).parent,
+                )
+                timings["subtitle_render"] = (
+                    time.perf_counter() - subtitle_started
+                )
 
-    # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="libx264", bitrate="18000k", fps=fps, audio_bitrate="320k", threads=64)
-    # final_clip.write_videofile(output_file, audio_codec="aac", codec="h264_nvenc", bitrate="20000k", fps=fps, audio_bitrate="128k", threads=64, ffmpeg_params=["-b:v", "20M", "-rc", "vbr"])
-    # final_clip.write_videofile(output_file, audio_codec="aac", codec="h264_nvenc", bitrate="18000k", fps=fps, audio_bitrate="256k")
-    final_clip.write_videofile(output_file, audio_codec="aac", codec="h264_nvenc", bitrate="18000k", fps=fps, audio_bitrate="256k",ffmpeg_params=ffmpeg_params)
+            ffmpeg_params = [
+                "-pix_fmt", "yuv420p",
+                "-vf", video_filter,
+                "-colorspace", "bt709",
+                "-color_primaries", "bt709",
+                "-color_trc", "bt709",
+                "-color_range", "pc",
+            ]
 
-    final_clip.close()
-    del final_clip
-    if subtitle_enabled:
-        burn_subtitles_to_video(output_file, subtitle_segments, style=subtitle_style)
-    kill_ffmpeg_processes()
+            render_started = time.perf_counter()
+            final_clip.write_videofile(
+                output_file,
+                audio_codec="aac",
+                codec="h264_nvenc",
+                bitrate="18000k",
+                fps=fps,
+                audio_bitrate="256k",
+                temp_audiofile=str(Path(temp_dir) / "moviepy-audio.mp4"),
+                remove_temp=True,
+                ffmpeg_params=ffmpeg_params,
+            )
+            timings["video_render"] = time.perf_counter() - render_started
+    finally:
+        final_clip.close()
+
+    if subtitle_enabled and subtitle_render_mode == "legacy_opencv":
+        subtitle_started = time.perf_counter()
+        burn_subtitles_to_video(
+            output_file,
+            subtitle_segments,
+            style=subtitle_style,
+        )
+        timings["subtitle_render"] = time.perf_counter() - subtitle_started
+    if not parallel_mode:
+        kill_ffmpeg_processes()
+
+    timings["total"] = time.perf_counter() - started_at
+    result = {
+        "task_index": task_index,
+        "status": "success",
+        "output_file": output_file,
+        "seed": random_seed,
+        "subtitle_render_mode": subtitle_render_mode,
+        "timings": timings,
+        "error": None,
+    }
+    print(f"任务完成：{json.dumps(result, ensure_ascii=False)}")
+    return result
+
+
+def _render_video_task(task):
+    task_index = int(task["task_index"])
+    random_seed = int(task["seed"])
+    started_at = time.perf_counter()
+    try:
+        return multiple_video_voice_bgm_generation(
+            **task["generation_kwargs"],
+            task_index=task_index,
+            random_seed=random_seed,
+            parallel_mode=bool(task.get("parallel_mode", False)),
+        )
+    except Exception as exc:
+        error = "".join(
+            traceback.format_exception_only(type(exc), exc)
+        ).strip()
+        result = {
+            "task_index": task_index,
+            "status": "failed",
+            "output_file": None,
+            "seed": random_seed,
+            "subtitle_render_mode": task["generation_kwargs"].get(
+                "subtitle_render_mode",
+                "legacy_opencv",
+            ),
+            "timings": {
+                "material_prepare": 0.0,
+                "audio_mix": 0.0,
+                "video_render": 0.0,
+                "subtitle_render": 0.0,
+                "total": time.perf_counter() - started_at,
+            },
+            "error": error,
+        }
+        print(f"任务失败：{json.dumps(result, ensure_ascii=False)}")
+        return result
+
+
+def _failed_task_result(task, error):
+    return {
+        "task_index": int(task["task_index"]),
+        "status": "failed",
+        "output_file": None,
+        "seed": int(task["seed"]),
+        "subtitle_render_mode": task["generation_kwargs"].get(
+            "subtitle_render_mode",
+            "legacy_opencv",
+        ),
+        "timings": {
+            "material_prepare": 0.0,
+            "audio_mix": 0.0,
+            "video_render": 0.0,
+            "subtitle_render": 0.0,
+            "total": 0.0,
+        },
+        "error": str(error),
+    }
+
+
+def _subtitle_style_from_config(config, subtitle_config):
+    field_defaults = {
+        "font": None,
+        "font_path": None,
+        "font_size": 67,
+        "letter_spacing": 0,
+        "color": "#FFDE00",
+        "opacity": 1.0,
+        "stroke_enabled": True,
+        "stroke_color": "#000000",
+        "stroke_opacity": 1.0,
+        "stroke_width": 5,
+        "vertical_percent": 12,
+        "max_width_percent": 86,
+    }
+    return {
+        field: subtitle_config.get(
+            field,
+            config.get(f"subtitle_{field}", default),
+        )
+        for field, default in field_defaults.items()
+    }
+
+
+def _generation_kwargs_from_config(config):
+    subtitle_config = config.get("subtitle_config", {})
+    subtitle_render_mode = subtitle_config.get(
+        "render_mode",
+        "legacy_opencv",
+    )
+    if subtitle_render_mode not in {"legacy_opencv", "single_pass_ass"}:
+        raise ValueError(
+            f"subtitle_config.render_mode 无效：{subtitle_render_mode}"
+        )
+
+    return {
+        "project_name": config["project_name"],
+        "output_folder": config["output_folder"],
+        "folder_path_list": utils.get_sorted_absolute_subdirectories(
+            config["video_folder_path"]
+        ),
+        "number_of_video_list": config["number_of_video_list"],
+        "bgm_folder_path": config["bgm_folder_path"],
+        "audio_volumex": config["audio_volumex"],
+        "bgm_volumex": config["bgm_volumex"],
+        "clip_size": config["clip_size"],
+        "fps": config["fps"],
+        "voice_folder_path_list": utils.get_sorted_absolute_subdirectories(
+            config["voice_folder_path"]
+        ),
+        "subtitle_enabled": subtitle_config.get(
+            "enabled",
+            config.get("subtitle_enabled", True),
+        ),
+        "subtitle_filename": subtitle_config.get(
+            "filename",
+            config.get("subtitle_filename", "subtitles.json"),
+        ),
+        "subtitle_style": _subtitle_style_from_config(
+            config,
+            subtitle_config,
+        ),
+        "split_on_comma": subtitle_config.get(
+            "split_on_comma",
+            config.get("subtitle_split_on_comma", True),
+        ),
+        "split_timing_mode": subtitle_config.get(
+            "split_timing_mode",
+            config.get("subtitle_split_timing_mode", "character_ratio"),
+        ),
+        "speech_key": resolve_config_value(
+            config.get("voice_config", {}).get("speech_key", "")
+        ),
+        "service_region": config.get("voice_config", {}).get(
+            "service_region"
+        ),
+        "subtitle_render_mode": subtitle_render_mode,
+    }
+
+
+def _print_batch_summary(results):
+    ordered = sorted(results, key=lambda item: item["task_index"])
+    succeeded = [item for item in ordered if item["status"] == "success"]
+    failed = [item for item in ordered if item["status"] == "failed"]
+    print(
+        f"批量任务完成：成功 {len(succeeded)} 条，失败 {len(failed)} 条"
+    )
+    for item in succeeded:
+        print(f"- 成功 task-{item['task_index'] + 1:03d}: {item['output_file']}")
+    for item in failed:
+        print(f"- 失败 task-{item['task_index'] + 1:03d}: {item['error']}")
+    return ordered
+
 
 def batch_multiple_video_voice_bgm_generation(config_file_dir):
     # config_file_dir = 'config'
     config_file_list = utils.find_files_by_extensions(config_file_dir, extensions=['.json'])
+    all_results = []
     for config_file in config_file_list:
         print(f'现在读取文件【{config_file}】')
         with open(config_file, "r", encoding="utf-8") as f:
             config = json.load(f)
 
-        project_name = config["project_name"]
-        output_folder = config["output_folder"]
-        bgm_folder_path = config["bgm_folder_path"]
-        voice_folder_path = config["voice_folder_path"]
-        video_folder_path = config["video_folder_path"]
-        audio_volumex = config["audio_volumex"]
-        bgm_volumex = config["bgm_volumex"]
-        clip_size = config["clip_size"]
-        fps = config["fps"]
-        voice_speed = config["voice_speed"]
-        voice_txt_file = config["voice_config"]["voice_txt_file"]
-        voice_name = config["voice_config"]["voice_name"]
-        speech_key = resolve_config_value(config["voice_config"]["speech_key"])
-        service_region = config["voice_config"]["service_region"]
-        number_of_video_list = config["number_of_video_list"]
         generated_quantity = config["generated_quantity"]
-        subtitle_config = config.get("subtitle_config", {})
-        subtitle_enabled = subtitle_config.get("enabled", config.get("subtitle_enabled", True))
-        subtitle_filename = subtitle_config.get("filename", config.get("subtitle_filename", "subtitles.json"))
-        split_on_comma = subtitle_config.get("split_on_comma", config.get("subtitle_split_on_comma", True))
-        split_timing_mode = subtitle_config.get(
-            "split_timing_mode",
-            config.get("subtitle_split_timing_mode", "character_ratio"),
+        batch_render = config.get("batch_render", {})
+        execution_mode = batch_render.get("execution_mode", "serial")
+        if execution_mode not in {"serial", "parallel"}:
+            raise ValueError(
+                f"batch_render.execution_mode 无效：{execution_mode}"
+            )
+        max_workers = int(batch_render.get("max_workers", 2))
+        if max_workers < 1:
+            raise ValueError("batch_render.max_workers 必须大于等于 1")
+        if batch_render.get("continue_on_error", True) is not True:
+            raise ValueError(
+                "当前版本 batch_render.continue_on_error 必须为 true"
+            )
+
+        generation_kwargs = _generation_kwargs_from_config(config)
+        print(
+            f"voice_folder_path_list:"
+            f"{generation_kwargs['voice_folder_path_list']}"
         )
-        subtitle_style = {
-            "font": subtitle_config.get("font", config.get("subtitle_font")),
-            "font_path": subtitle_config.get("font_path", config.get("subtitle_font_path")),
-            "font_size": subtitle_config.get("font_size", config.get("subtitle_font_size", 67)),
-            "letter_spacing": subtitle_config.get("letter_spacing", config.get("subtitle_letter_spacing", 0)),
-            "color": subtitle_config.get("color", config.get("subtitle_color", "#FFDE00")),
-            "opacity": subtitle_config.get("opacity", config.get("subtitle_opacity", 1.0)),
-            "stroke_enabled": subtitle_config.get("stroke_enabled", config.get("subtitle_stroke_enabled", True)),
-            "stroke_color": subtitle_config.get("stroke_color", config.get("subtitle_stroke_color", "#000000")),
-            "stroke_opacity": subtitle_config.get("stroke_opacity", config.get("subtitle_stroke_opacity", 1.0)),
-            "stroke_width": subtitle_config.get("stroke_width", config.get("subtitle_stroke_width", 5)),
-            "vertical_percent": subtitle_config.get("vertical_percent", config.get("subtitle_vertical_percent", 12)),
-            "max_width_percent": subtitle_config.get("max_width_percent", config.get("subtitle_max_width_percent", 86)),
-        }
-
-        folder_path_list = utils.get_sorted_absolute_subdirectories(video_folder_path)
-        voice_folder_path_list = utils.get_sorted_absolute_subdirectories(voice_folder_path)
-        # voice_path_list = [os.path.join(voice_folder_path, f) for f in os.listdir(voice_folder_path) if
-        #                    f.lower().endswith(('.mp3', '.wav'))]
-        print(f'voice_folder_path_list:{voice_folder_path_list}')
-
-        # generated_quantity = 5
         print(f'总共制作视频：{generated_quantity}条')
-        for i in range(generated_quantity):
-            # multiple_video_generation()
-            multiple_video_voice_bgm_generation(project_name=project_name,
-                                      output_folder=output_folder,
-                                      folder_path_list=folder_path_list,
-                                      number_of_video_list=number_of_video_list,
-                                      bgm_folder_path=bgm_folder_path,
-                                      audio_volumex=audio_volumex,
-                                      bgm_volumex=bgm_volumex,
-                                      clip_size=clip_size,
-                                      fps=fps,
-                                      voice_folder_path_list=voice_folder_path_list,
-                                      subtitle_enabled=subtitle_enabled,
-                                      subtitle_filename=subtitle_filename,
-                                      subtitle_style=subtitle_style,
-                                      split_on_comma=split_on_comma,
-                                      split_timing_mode=split_timing_mode,
-                                      speech_key=speech_key,
-                                      service_region=service_region)
+        base_seed = int(
+            batch_render.get(
+                "base_seed",
+                random.SystemRandom().randrange(1, 2**31),
+            )
+        )
+        print(f"本次批量随机种子：{base_seed}")
+        tasks = [
+            {
+                "task_index": index,
+                "seed": base_seed + index,
+                "parallel_mode": execution_mode == "parallel",
+                "generation_kwargs": generation_kwargs,
+            }
+            for index in range(generated_quantity)
+        ]
+
+        if execution_mode == "parallel":
+            print(f"启用进程并发：max_workers={max_workers}")
+            results = []
+            with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(_render_video_task, task): task
+                    for task in tasks
+                }
+                for future in as_completed(futures):
+                    task = futures[future]
+                    try:
+                        results.append(future.result())
+                    except Exception as exc:
+                        results.append(_failed_task_result(task, exc))
+        else:
+            results = [_render_video_task(task) for task in tasks]
+
+        all_results.extend(_print_batch_summary(results))
+    return all_results
 
 
 

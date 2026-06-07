@@ -4,7 +4,9 @@ import re
 import subprocess
 import tempfile
 import time
+from contextlib import contextmanager
 from copy import deepcopy
+from functools import lru_cache
 from pathlib import Path
 
 try:
@@ -15,9 +17,11 @@ except ImportError:  # pragma: no cover - handled at runtime by generator.
 
 AUDIO_EXTENSIONS = (".mp3", ".aac", ".acc", ".m4a", ".wav")
 DEFAULT_SUBTITLE_FILE = "subtitles.json"
-TRAILING_SUBTITLE_PUNCTUATION = "。."
-SUBTITLE_SPLIT_SEPARATORS = re.compile(r"[，,]")
+SUBTITLE_PERIODS = re.compile(r"[。.]+")
+SUBTITLE_SPLIT_SEPARATORS = re.compile(r"[，,。.]+")
 VALID_SPLIT_TIMING_MODES = {"character_ratio", "speech_timestamps"}
+SUBTITLE_LOCK_TIMEOUT = 30
+SUBTITLE_LOCK_STALE_SECONDS = 120
 
 
 def load_subtitle_map(audio_folder, filename=DEFAULT_SUBTITLE_FILE):
@@ -80,6 +84,39 @@ def _write_json_safely(path, payload):
             temp_path.unlink()
 
 
+@contextmanager
+def _subtitle_file_lock(path, timeout=SUBTITLE_LOCK_TIMEOUT):
+    path = Path(path)
+    lock_path = path.with_name(path.name + ".lock")
+    deadline = time.monotonic() + timeout
+    lock_fd = None
+
+    while lock_fd is None:
+        try:
+            lock_fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(lock_fd, f"{os.getpid()}\n".encode("ascii"))
+        except FileExistsError:
+            try:
+                if time.time() - lock_path.stat().st_mtime > SUBTITLE_LOCK_STALE_SECONDS:
+                    lock_path.unlink()
+                    continue
+            except FileNotFoundError:
+                continue
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"等待字幕缓存锁超时：{lock_path}")
+            time.sleep(0.1)
+
+    try:
+        yield
+    finally:
+        if lock_fd is not None:
+            os.close(lock_fd)
+        try:
+            lock_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
 def _serialize_subtitle_payload(payload):
     serializable = deepcopy(payload)
     replacements = {}
@@ -128,18 +165,18 @@ def get_subtitle_text(audio_folder, audio_file, filename=DEFAULT_SUBTITLE_FILE):
 
 def normalize_subtitle_text(text):
     text = str(text or "").strip()
-    return text.rstrip(TRAILING_SUBTITLE_PUNCTUATION).strip()
+    return SUBTITLE_PERIODS.sub("", text).strip()
 
 
 def _visible_length(text):
     return len("".join(str(text or "").split()))
 
 
-def _split_text_by_comma(text):
+def _split_subtitle_text(text):
     return [
-        part.strip()
-        for part in SUBTITLE_SPLIT_SEPARATORS.split(normalize_subtitle_text(text))
-        if part.strip()
+        normalized
+        for part in SUBTITLE_SPLIT_SEPARATORS.split(str(text or ""))
+        if (normalized := normalize_subtitle_text(part))
     ]
 
 
@@ -373,16 +410,16 @@ def _valid_cached_segments(cached_segments, parts):
 
 
 def _write_split_cache(audio_folder, filename, audio_name, item, mode, segments):
-    payload = _load_subtitle_payload(audio_folder, filename)
-    items = payload.setdefault("items", {})
-    current = _normalize_subtitle_item(items.get(audio_name, item))
-    current["text"] = item["text"]
-    current.setdefault("splits", {})[mode] = segments
-    items[audio_name] = current
-    payload["version"] = max(int(payload.get("version", 1) or 1), 2)
-
     subtitle_file = _subtitle_file_path(audio_folder, filename)
-    _write_json_safely(subtitle_file, payload)
+    with _subtitle_file_lock(subtitle_file):
+        payload = _load_subtitle_payload(audio_folder, filename)
+        items = payload.setdefault("items", {})
+        current = _normalize_subtitle_item(items.get(audio_name, item))
+        current["text"] = item["text"]
+        current.setdefault("splits", {})[mode] = segments
+        items[audio_name] = current
+        payload["version"] = max(int(payload.get("version", 1) or 1), 2)
+        _write_json_safely(subtitle_file, payload)
 
 
 def _map_ratios_to_timeline(start, end, ratio_segments):
@@ -418,7 +455,8 @@ def build_subtitle_segments(
     items = payload.get("items", {})
     audio_name = os.path.basename(audio_file)
     item = _normalize_subtitle_item(items.get(audio_name, ""))
-    text = normalize_subtitle_text(item["text"])
+    source_text = str(item["text"] or "").strip()
+    text = normalize_subtitle_text(source_text)
     if not text:
         print(f"字幕提示：未找到【{audio_name}】对应字幕，将跳过该段字幕")
         return []
@@ -426,7 +464,7 @@ def build_subtitle_segments(
     if not split_on_comma:
         return [{"start": start, "end": end, "text": text}]
 
-    parts = _split_text_by_comma(text)
+    parts = _split_subtitle_text(source_text)
     if len(parts) <= 1:
         return [{"start": start, "end": end, "text": text}]
 
@@ -777,6 +815,203 @@ def _draw_spaced_multiline_text(
             )
             current_x += draw.textlength(char, font=font) + letter_spacing
         current_y += line_height + line_spacing
+
+
+def _ass_timestamp(seconds):
+    centiseconds = max(0, int(round(float(seconds) * 100)))
+    hours, remainder = divmod(centiseconds, 360000)
+    minutes, remainder = divmod(remainder, 6000)
+    whole_seconds, fraction = divmod(remainder, 100)
+    return f"{hours}:{minutes:02d}:{whole_seconds:02d}.{fraction:02d}"
+
+
+def _ass_color(value, opacity=1.0):
+    red, green, blue = _parse_color(value, (255, 255, 255))
+    alpha = 255 - round(float(_clamp(float(opacity), 0, 1)) * 255)
+    return f"&H{alpha:02X}{blue:02X}{green:02X}{red:02X}"
+
+
+def _escape_ass_text(text):
+    return (
+        str(text)
+        .replace("\\", r"\\")
+        .replace("{", r"\{")
+        .replace("}", r"\}")
+        .replace("\n", r"\N")
+    )
+
+
+def _escape_ffmpeg_filter_path(path):
+    value = Path(path).resolve().as_posix()
+    return (
+        value.replace("\\", r"\\")
+        .replace(":", r"\:")
+        .replace("'", r"\'")
+        .replace(",", r"\,")
+        .replace("[", r"\[")
+        .replace("]", r"\]")
+        .replace(";", r"\;")
+    )
+
+
+def _ass_font_details(style, video_size):
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except ImportError as exc:
+        raise RuntimeError("生成 ASS 字幕需要 Pillow，请先安装 pillow") from exc
+
+    frame_width, frame_height = video_size
+    font_size = int(style.get("font_size", max(42, frame_height * 0.035)))
+    font_path = Path(_find_font(style.get("font") or style.get("font_path")))
+    font = ImageFont.truetype(str(font_path), font_size)
+    family_name = font.getname()[0]
+    image = Image.new("RGB", (max(1, frame_width), max(1, frame_height)))
+    draw = ImageDraw.Draw(image)
+    return font_path, family_name, font, draw
+
+
+def create_ass_subtitle_file(
+    subtitle_segments,
+    style,
+    video_size,
+    output_path,
+):
+    style = style or {}
+    frame_width, frame_height = (int(video_size[0]), int(video_size[1]))
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    font_path, family_name, font, draw = _ass_font_details(
+        style,
+        (frame_width, frame_height),
+    )
+    font_size = int(style.get("font_size", max(42, frame_height * 0.035)))
+    letter_spacing = float(style.get("letter_spacing", 0))
+    max_width_percent = float(
+        _clamp(float(style.get("max_width_percent", 86)), 1, 100)
+    )
+    max_text_width = int(frame_width * max_width_percent / 100)
+    stroke_enabled = bool(style.get("stroke_enabled", True))
+    stroke_width = float(style.get("stroke_width", 4)) if stroke_enabled else 0.0
+    vertical_percent = float(
+        _clamp(float(style.get("vertical_percent", 12)), 0, 100)
+    )
+    line_spacing = max(0, int(font_size * 0.18))
+    primary_color = _ass_color(
+        style.get("color", style.get("fill", "#FFDE00")),
+        style.get("opacity", 1.0),
+    )
+    outline_color = _ass_color(
+        style.get("stroke_color", style.get("stroke_fill", "#000000")),
+        style.get("stroke_opacity", 1.0),
+    )
+
+    header = [
+        "[Script Info]",
+        "ScriptType: v4.00+",
+        "WrapStyle: 2",
+        "ScaledBorderAndShadow: yes",
+        f"PlayResX: {frame_width}",
+        f"PlayResY: {frame_height}",
+        "",
+        "[V4+ Styles]",
+        (
+            "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
+            "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
+            "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+            "Alignment, MarginL, MarginR, MarginV, Encoding"
+        ),
+        (
+            f"Style: Default,{family_name},{font_size},{primary_color},{primary_color},"
+            f"{outline_color},&H00000000,-1,0,0,0,100,100,{letter_spacing:g},0,1,"
+            f"{stroke_width:g},0,5,0,0,0,1"
+        ),
+        "",
+        "[Events]",
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ]
+    events = []
+    for segment in subtitle_segments:
+        text = str(segment.get("text", "") or "").strip()
+        start = float(segment.get("start", 0) or 0)
+        end = float(segment.get("end", 0) or 0)
+        if not text or end <= start:
+            continue
+
+        wrapped_text = _wrap_text(
+            text,
+            draw,
+            font,
+            max_text_width,
+            letter_spacing,
+        )
+        lines = wrapped_text.splitlines() or [wrapped_text]
+        _, text_height, _ = _spaced_text_block_size(
+            lines,
+            draw,
+            font,
+            int(round(stroke_width)),
+            letter_spacing,
+            line_spacing,
+        )
+        top = (100 - vertical_percent) / 100 * (frame_height - text_height)
+        center_y = int(round(top + text_height / 2))
+        override = (
+            rf"{{\an5\pos({frame_width // 2},{center_y})"
+            rf"\fsp{letter_spacing:g}}}"
+        )
+        event_text = override + _escape_ass_text(wrapped_text)
+        events.append(
+            "Dialogue: 0,"
+            f"{_ass_timestamp(start)},{_ass_timestamp(end)},"
+            f"Default,,0,0,0,,{event_text}"
+        )
+
+    output_path.write_text(
+        "\n".join([*header, *events, ""]),
+        encoding="utf-8-sig",
+    )
+    return {
+        "path": str(output_path),
+        "font_path": str(font_path),
+        "font_family": family_name,
+        "event_count": len(events),
+    }
+
+
+@lru_cache(maxsize=4)
+def ensure_ffmpeg_ass_filter(ffmpeg_executable=None):
+    if ffmpeg_executable is None:
+        try:
+            from imageio_ffmpeg import get_ffmpeg_exe
+
+            ffmpeg_executable = get_ffmpeg_exe()
+        except Exception:
+            ffmpeg_executable = "ffmpeg"
+
+    result = subprocess.run(
+        [str(ffmpeg_executable), "-hide_banner", "-filters"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    filters = f"{result.stdout}\n{result.stderr}"
+    if result.returncode != 0 or not re.search(r"(?m)^\s*\.\.\.\s+ass\s+V->V", filters):
+        raise RuntimeError(
+            "当前 FFmpeg 不包含 ass/libass 滤镜，无法使用 single_pass_ass"
+        )
+    return str(ffmpeg_executable)
+
+
+def build_ass_ffmpeg_filter(ass_path, font_dir):
+    ass_value = _escape_ffmpeg_filter_path(ass_path)
+    font_value = _escape_ffmpeg_filter_path(font_dir)
+    return (
+        f"ass=filename='{ass_value}':fontsdir='{font_value}',"
+        "format=yuv420p"
+    )
 
 
 def _active_subtitle_text(subtitle_segments, time_seconds):

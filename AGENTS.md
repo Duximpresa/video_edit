@@ -34,13 +34,13 @@ D:\ProgramData\miniconda3\envs\main\python.exe -m pip install -r requirements-lo
 
 本地识别默认使用 Paraformer-zh，失败时依次回退到 faster-whisper `small` 和 `base`。最低目标显卡为 GTX 1060 6GB，不默认回退到 CPU。
 
-模型应缓存在项目外，例如：
+模型默认缓存在项目内但不进入 Git：
 
 ```text
-%LOCALAPPDATA%\video_edit\models\asr
+models\asr
 ```
 
-不要把模型权重、下载缓存或临时转码文件提交到 Git。
+Git 只保留 `models/` 目录结构和说明文件。不要把模型权重、下载缓存或临时转码文件提交到 Git。
 
 ## MoviePy 2 约定
 
@@ -75,12 +75,53 @@ D:\ProgramData\miniconda3\envs\main\python.exe -m pip install -r requirements-lo
 - 写入 JSON 时使用临时文件和原子替换，避免中途退出损坏文件。
 - `split_timing_mode` 支持 `character_ratio` 和 `speech_timestamps`。
 - 语音时间戳失败时可以回退到字符比例，但缓存必须标记实际使用的模式。
-- `split_on_comma=false` 时应保持整句字幕。
+- `split_on_comma=true` 时应同时按中文/英文逗号 `，`、`,` 和句号 `。`、`.` 拆分。字段名为兼容旧配置而保留，不要仅按逗号处理。
+- 分段前必须保留原始标点作为边界，不能先调用全文句号清理再拆分；正确顺序是“按标点切段 -> 清理每段标点 -> 计算时间比例”。
+- 中文句号 `。` 和英文句号 `.` 不应出现在最终显示字幕中；`split_on_comma=false` 时保持整句时间轴，但仍清除显示文本中的句号。
+- 分段缓存通过段落文本和段落数量校验。标点规则变化导致缓存与新分段不一致时，应重新计算并安全写回，不要复用失效缓存。
+- 字幕规范化只用于显示、拆分和缓存校验，不得改写 `subtitles.json` 中人工维护的原始 `text`。
 - 缺少字幕文件或映射时只输出警告，不应中断视频生成。
 
 字幕样式从项目 JSON 的 `subtitle_config` 读取。配置文件必须保持标准 JSON，不要加入 `//`、`/* */` 等注释；字段说明应写入 README。
 
 字体必须优先使用根目录 `font/` 下的文件，不依赖系统字体。
+
+## 字幕分段实现思路
+
+字幕分段入口位于 `modules/subtitle_tools.py` 的 `build_subtitle_segments()`：
+
+1. 读取 `subtitles.json` 中当前随机配音文件对应的原始文字。
+2. `split_on_comma=false` 时生成覆盖整个配音片段的一条字幕，只清理显示文本中的句号。
+3. `split_on_comma=true` 时使用统一分隔正则识别中英文逗号和句号，再对每个非空片段执行显示文本规范化。
+4. `character_ratio` 根据各段可见字符数占比分配当前配音片段时长。
+5. `speech_timestamps` 优先匹配本地识别缓存中的字符级时间戳，必要时再调用配置的语音时间戳后端；失败后回退字符比例。
+6. 缓存只保存 `start_ratio/end_ratio`，不保存绝对秒数，使同一音频在不同视频时长中仍可复用。
+7. 写回缓存时使用字幕文件锁、临时文件和原子替换，避免批量并发任务互相覆盖或损坏 JSON。
+
+新增或修改分段符时，必须同时补充覆盖中文标点、英文标点、混合标点、关闭拆分和旧缓存失效的测试。
+
+## 视频渲染与批量并发
+
+项目保留两套字幕渲染流程，由 `subtitle_config.render_mode` 选择：
+
+- `legacy_opencv`：原有 MoviePy 输出后再用 OpenCV/Pillow 烧录字幕的兼容流程，也是缺省值。
+- `single_pass_ass`：先把现有字幕时间轴和样式转换为临时 ASS，通过 FFmpeg `ass` 滤镜在 MoviePy 最终输出时一次完成视频编码。
+
+ASS 实现规则：
+
+- 使用现有 Pillow 字体测量和换行结果生成 ASS `\N`，避免两套流程换行差异过大。
+- 从项目字体文件读取真实字体家族名称，并通过 FFmpeg `fontsdir` 指向根目录 `font/`。
+- 字体颜色、透明度、描边、字间距、垂直百分比位置和最大行宽都应映射现有 `subtitle_config`，不要另建一套样式字段。
+- Windows 路径传入 FFmpeg 滤镜前必须处理盘符、反斜杠、空格和特殊字符转义。
+- `single_pass_ass` 缺少 libass/滤镜或字体加载失败时应明确报错，不自动静默回退旧流程。
+- 临时 ASS、音频和中间文件必须使用任务独立临时目录并在结束后清理。
+
+批量执行由 `batch_render.execution_mode` 选择：
+
+- `serial`：保留原有顺序生成行为，也是缺省值。
+- `parallel`：使用 `ProcessPoolExecutor` 进程级并发，每条任务拥有独立随机种子、临时目录和唯一输出名。
+
+并发任务不得调用会终止其他任务 FFmpeg 进程的全局清理逻辑。单条失败应返回结构化错误并继续其他任务，最终汇总成功数、失败数、输出路径和分阶段耗时。字幕缓存写入必须继续使用跨进程文件锁。
 
 ## 本地语音识别
 
@@ -121,6 +162,12 @@ D:\ProgramData\miniconda3\envs\main\python.exe -m py_compile test.py modules\vid
 
 ```powershell
 D:\ProgramData\miniconda3\envs\main\python.exe -m unittest tests.test_subtitle_map_generation -q
+```
+
+ASS 单次编码或批量并发相关修改还应运行：
+
+```powershell
+D:\ProgramData\miniconda3\envs\main\python.exe -m unittest tests.test_render_performance -q
 ```
 
 修改 JSON 配置后，应使用 `json.load` 验证配置合法。
