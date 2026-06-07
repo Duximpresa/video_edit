@@ -12,7 +12,7 @@
     "voice_config": {
         "voice_txt_file": "input/Voice_Text/摆地摊.txt",
         "voice_name": "zh-CN-XiaoxiaoMultilingualNeural",
-        "speech_key": "8b7335e4c1cf4708a48453f878a6c802",
+        "speech_key": "${AZURE_SPEECH_KEY}",
         "service_region": "southeastasia"
     },
     "number_of_video_list": [1, 2, 2, 2, 2, 2, 2, 2, 2, 1],

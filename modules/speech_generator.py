@@ -1,4 +1,4 @@
-from operator import index
+﻿from operator import index
 
 import azure.cognitiveservices.speech as speechsdk
 import os
@@ -6,6 +6,12 @@ from utils import utils
 from tqdm import tqdm
 
 root_dir = utils.root_dir()
+
+
+def resolve_config_value(value):
+    if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+        return os.getenv(value[2:-1], "")
+    return value
 
 def read_txt(file_path):
     with open("speechText.txt", mode="r", encoding="utf-8") as f:
@@ -159,7 +165,7 @@ def text2speech_batch_txtfile(txtfile, voice_name, project_name, speech_config, 
 
 
 def main():
-    speech_key = "8b7335e4c1cf4708a48453f878a6c802"
+    speech_key = resolve_config_value("${AZURE_SPEECH_KEY}")
     service_region = "southeastasia"
     speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=service_region)
     speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Riff44100Hz16BitMonoPcm)
@@ -172,7 +178,7 @@ def main():
     voice_filename = text2speech_hash_code(text, voice_name, project_name, speech_config, voice_speed)
 
 def main2():
-    speech_key = "8b7335e4c1cf4708a48453f878a6c802"
+    speech_key = resolve_config_value("${AZURE_SPEECH_KEY}")
     service_region = "southeastasia"
     speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=service_region)
     speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Riff44100Hz16BitMonoPcm)

@@ -2,8 +2,8 @@ import os
 import random
 from distutils.command.config import config
 
-from moviepy.editor import VideoFileClip, concatenate_videoclips
-from moviepy.editor import *
+from moviepy import VideoFileClip, concatenate_videoclips
+from moviepy import *
 # from moviepy.audio.io import AudioFileClip
 from datetime import datetime
 from app import voice

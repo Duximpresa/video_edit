@@ -2,8 +2,9 @@ import os
 import random
 from distutils.command.config import config
 
-from moviepy.editor import VideoFileClip, concatenate_videoclips
-from moviepy.editor import *
+from moviepy import VideoFileClip, concatenate_videoclips
+from moviepy import *
+from moviepy.audio.fx import AudioLoop
 # from moviepy.audio.io import AudioFileClip
 from datetime import datetime
 from app import voice
@@ -15,8 +16,22 @@ from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import Process
 import psutil
 import json
+from modules.subtitle_tools import burn_subtitles_to_video, build_subtitle_segments, get_subtitle_text
 
 root_dir = utils.root_dir()
+AUDIO_END_PADDING = 0.05
+
+
+def resolve_config_value(value):
+    if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+        return os.getenv(value[2:-1], "")
+    return value
+
+
+def scale_audio_volume(audio_clip, factor):
+    return audio_clip.with_updated_frame_function(
+        lambda t, get_frame=audio_clip.get_frame: get_frame(t) * factor
+    )
 
 def kill_ffmpeg_processes():
     for proc in psutil.process_iter():
@@ -33,7 +48,7 @@ def random_clip(video_path, clip_duration, output_path):
     start_time = random.uniform(0, max_start)
 
     # 截取视频片段
-    clip = video.subclip(start_time, start_time + clip_duration)
+    clip = video.subclipped(start_time, start_time + clip_duration)
 
     # 输出视频片段
     # clip.write_videofile(output_path, codec='libx264')
@@ -83,7 +98,7 @@ def create_video_montage(folder_path, number_of_videos, clip_duration, with_audi
         # 加载视频文件
         print(f'加载视频文件:{video}')
         video_clip = VideoFileClip(video)
-        # video_clip = video_clip.resize((1080, 1920))
+        # video_clip = video_clip.resized((1080, 1920))
         print(f'视频分辨率：{video_clip.size}')
 
         # 随机选择片段的开始时间
@@ -103,12 +118,12 @@ def create_video_montage(folder_path, number_of_videos, clip_duration, with_audi
         if video_clip.duration > random_clip_duration:
             # 创建指定长度的子片段
             print('创建指定长度的子片段')
-            subclip = video_clip.subclip(start_time, start_time + random_clip_duration)
+            subclip = video_clip.subclipped(start_time, start_time + random_clip_duration)
         else:
             print('片段时长小于所需时长')
             start_time = 0
             end_time = video_clip.duration
-            subclip = video_clip.subclip(start_time, end_time)
+            subclip = video_clip.subclipped(start_time, end_time)
 
         # 根据 with_audio 参数设置子片段的音频
         if not with_audio:
@@ -149,8 +164,8 @@ def multiple_video_bgm_generation(project_name,
     bgm_file_path = os.path.join(root_dir, bgm_folder_path, bgm_file)
 
     # # 配音和BGM进行混音
-    # audio_clip = AudioFileClip(voice_filename).volumex(audio_volumex)
-    # bgm_clip = AudioFileClip(bgm_file_path).volumex(bgm_volumex)
+    # audio_clip = AudioFileClip(voice_filename) * (audio_volumex)
+    # bgm_clip = AudioFileClip(bgm_file_path) * (bgm_volumex)
     # composite_audio = CompositeAudioClip([audio_clip, bgm_clip])
     # all_clips_number = sum(number_of_video_list)
     # one_clip_duration = round((audio_clip.duration + 1) / all_clips_number, 1)
@@ -181,10 +196,10 @@ def multiple_video_bgm_generation(project_name,
     print(f'视频长度：{final_clip_duration}')
 
     # 生成bgm片段
-    bgm_clip = AudioFileClip(bgm_file_path).volumex(bgm_volumex)
-    final_clip = final_clip.set_audio(bgm_clip)
+    bgm_clip = scale_audio_volume(AudioFileClip(bgm_file_path), bgm_volumex)
+    final_clip = final_clip.with_audio(bgm_clip)
     # 因为BGM是超长的，这里截取视频长度
-    final_clip = final_clip.set_duration(final_clip_duration)
+    final_clip = final_clip.with_duration(final_clip_duration)
 
     ffmpeg_params = [
         "-pix_fmt", "yuv420p",  # 强制输出 YUV 像素格式
@@ -225,7 +240,7 @@ def batch_multiple_video_bgm_generation(config_file_dir):
         voice_speed = config["voice_speed"]
         voice_txt_file = config["voice_config"]["voice_txt_file"]
         voice_name = config["voice_config"]["voice_name"]
-        speech_key = config["voice_config"]["speech_key"]
+        speech_key = resolve_config_value(config["voice_config"]["speech_key"])
         service_region = config["voice_config"]["service_region"]
         number_of_video_list = config["number_of_video_list"]
         generated_quantity = config["generated_quantity"]
@@ -251,7 +266,13 @@ def batch_multiple_video_bgm_generation(config_file_dir):
 
 
 
-def create_video_and_voice_montage(folder_path, number_of_videos, voice_folder_path, with_audio=True):
+def create_video_and_voice_montage(
+        folder_path,
+        number_of_videos,
+        voice_folder_path,
+        with_audio=True,
+        subtitle_filename='subtitles.json',
+        return_metadata=False):
     # 从指定文件夹获取所有的音频文件
     print('从指定文件夹获取所有的音频文件')
     voice_files = [os.path.join(voice_folder_path, f) for f in os.listdir(voice_folder_path) if
@@ -261,6 +282,7 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_folder_p
     # 随机选择单个的音频文件
     print('随机选择单个的音频文件')
     voice_file = random.sample(voice_files, 1)[0]
+    subtitle_text = get_subtitle_text(voice_folder_path, voice_file, subtitle_filename)
     print(f'选择的配音文件{voice_file}')
     # 获取配音长度
     print('获取配音时长')
@@ -291,7 +313,7 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_folder_p
         # 加载视频文件
         print(f'加载视频文件:{video}')
         video_clip = VideoFileClip(video)
-        # video_clip = video_clip.resize((1080, 1920))
+        # video_clip = video_clip.resized((1080, 1920))
         print(f'视频分辨率：{video_clip.size}')
 
         # 随机选择片段的开始时间
@@ -304,13 +326,17 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_folder_p
 
         # 创建指定长度的子片段
         print('创建指定长度的子片段')
-        subclip = video_clip.subclip(start_time, start_time + clip_duration + 0.1)
+        end_time = min(video_clip.duration, start_time + clip_duration)
+        subclip = video_clip.subclipped(start_time, end_time)
         # 添加配音
         print(f'添加配音：{voice_file}')
         # audio_clip = AudioFileClip(voice_file).write_audiofile(f'output/test_{voice_file[-10:]}.mp3')
         audio_clip = AudioFileClip(voice_file)
+        safe_audio_duration = max(0, audio_clip.duration - AUDIO_END_PADDING)
+        audio_clip = audio_clip.subclipped(0, safe_audio_duration)
         subclip = subclip.without_audio()
-        subclip = subclip.set_audio(audio_clip)
+        subclip = subclip.with_audio(audio_clip)
+        subclip = subclip.with_duration(safe_audio_duration)
         # audio_clip.write_audiofile(f'output/test_{voice_file[-10:]}.mp3')
         print(f'音频时长{audio_clip.duration}')
         print(f'视频时长{subclip.duration}')
@@ -352,7 +378,7 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_folder_p
             # 加载视频文件
             print(f'加载视频文件:{video}')
             video_clip = VideoFileClip(video)
-            # video_clip = video_clip.resize((1080, 1920))
+            # video_clip = video_clip.resized((1080, 1920))
             print(f'视频分辨率：{video_clip.size}')
 
             # 随机选择片段的开始时间
@@ -365,22 +391,26 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_folder_p
 
             # 创建指定长度的子片段
             print('创建指定长度的子片段')
-            subclip = video_clip.subclip(start_time, start_time + clip_duration + 0.1)
+            end_time = min(video_clip.duration, start_time + clip_duration)
+            subclip = video_clip.subclipped(start_time, end_time)
             # 加入子片段列表
             subclips.append(subclip)
-            subclip.close()
-            del subclip
+            # Keep clip handles alive until final render; closing here can
+            # break downstream audio/video reads during write_videofile.
             # kill_ffmpeg_processes()
         # 添加配音
         print(f'添加配音：{voice_file}')
         # audio_clip = AudioFileClip(voice_file).write_audiofile(f'output/test_{voice_file[-10:]}.mp3')
         audio_clip = AudioFileClip(voice_file)
+        safe_audio_duration = max(0, audio_clip.duration - AUDIO_END_PADDING)
+        audio_clip = audio_clip.subclipped(0, safe_audio_duration)
         # 合并剪辑
         subclip_all = concatenate_videoclips(subclips)
         # 去除源音频
         subclip_all = subclip_all.without_audio()
         # 加入配音
-        subclip_all = subclip_all.set_audio(audio_clip)
+        subclip_all = subclip_all.with_audio(audio_clip)
+        subclip_all = subclip_all.with_duration(safe_audio_duration)
         # audio_clip.write_audiofile(f'output/test_{voice_file[-10:]}.mp3')
         print(f'音频时长{audio_clip.duration}')
         print(f'视频时长{subclip_all.duration}')
@@ -397,6 +427,12 @@ def create_video_and_voice_montage(folder_path, number_of_videos, voice_folder_p
     # print(clips)
     # random.shuffle(clips)
     print('返回剪辑')
+    if return_metadata:
+        return {
+            "clips": clips,
+            "voice_file": voice_file,
+            "subtitle_text": subtitle_text,
+        }
     return clips
 
 
@@ -409,7 +445,14 @@ def multiple_video_voice_bgm_generation(project_name,
                               bgm_volumex,
                               clip_size,
                               fps,
-                              voice_folder_path_list):
+                              voice_folder_path_list,
+                              subtitle_enabled=True,
+                              subtitle_filename='subtitles.json',
+                              subtitle_style=None,
+                              split_on_comma=True,
+                              split_timing_mode="character_ratio",
+                              speech_key=None,
+                              service_region=None):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
@@ -421,11 +464,13 @@ def multiple_video_voice_bgm_generation(project_name,
     bgm_file_path = os.path.join(root_dir, bgm_folder_path, bgm_file)
 
     # 配音和BGM进行混音
-    # audio_clip = AudioFileClip(voice_filename).volumex(audio_volumex)
-    # bgm_clip = AudioFileClip(bgm_file_path).volumex(bgm_volumex)
+    # audio_clip = AudioFileClip(voice_filename) * (audio_volumex)
+    # bgm_clip = AudioFileClip(bgm_file_path) * (bgm_volumex)
 
     # 片段混剪
     clips_list = []
+    subtitle_segments = []
+    subtitle_cursor = 0
     for index, folder_path in enumerate(folder_path_list):
         print(f'【配音文件夹】：{voice_folder_path_list[index]}')
         print(f'【视频文件夹】：{folder_path}')
@@ -436,7 +481,30 @@ def multiple_video_voice_bgm_generation(project_name,
         # print(f'【配音时长】：{voice_duration}')
         # clip_duration = voice_duration
         voice_folder_path = voice_folder_path_list[index]
-        clip = create_video_and_voice_montage(folder_path, number_of_video_list[index], voice_folder_path, with_audio=True)
+        montage = create_video_and_voice_montage(
+            folder_path,
+            number_of_video_list[index],
+            voice_folder_path,
+            with_audio=True,
+            subtitle_filename=subtitle_filename,
+            return_metadata=True,
+        )
+        clip = montage["clips"]
+        for item in clip:
+            segment_start = subtitle_cursor
+            segment_end = subtitle_cursor + item.duration
+            subtitle_segments.extend(build_subtitle_segments(
+                voice_folder_path,
+                montage["voice_file"],
+                segment_start,
+                segment_end,
+                filename=subtitle_filename,
+                split_on_comma=split_on_comma,
+                split_timing_mode=split_timing_mode,
+                speech_key=speech_key,
+                service_region=service_region,
+            ))
+            subtitle_cursor += item.duration
         print(f'成功返回剪辑{clip}')
         clips_list.append(clip)
         print(f'加入剪辑列表')
@@ -451,27 +519,27 @@ def multiple_video_voice_bgm_generation(project_name,
     print(output_file)
 
     final_clip = concatenate_videoclips(clips)
-    final_clip = final_clip.resize(newsize=(clip_size[0], clip_size[1]))
+    final_clip = final_clip.resized((clip_size[0], clip_size[1]))
     print(f'成片尺寸：{final_clip.size}')
     final_clip_duration = final_clip.duration
     print(f'视频长度：{final_clip_duration}')
     # print(f'音频长度：{audio_clip.duration}')
     # final_clip.write_videofile(output_file, audio_codec="libmp3lame", codec="h264_nvenc", bitrate="20000k", fps=fps,audio_bitrate="320k")
 
-    audio_clip = final_clip.audio.volumex(audio_volumex)
+    audio_clip = scale_audio_volume(final_clip.audio, audio_volumex)
     # audio_clip = final_clip.audio
     print(audio_clip.duration)
     print(final_clip.duration)
     # audio_clip.write_audiofile(f'output/test_测试.mp3')
 
-    # audio_clip = AudioFileClip(final_clip).volumex(audio_volumex)
-    bgm_clip = AudioFileClip(bgm_file_path).volumex(bgm_volumex)
+    # audio_clip = AudioFileClip(final_clip) * (audio_volumex)
+    bgm_clip = scale_audio_volume(AudioFileClip(bgm_file_path), bgm_volumex)
 
-    bgm_clip = afx.audio_loop(bgm_clip, duration=final_clip_duration)
-    bgm_clip = bgm_clip.set_start(0)
+    bgm_clip = bgm_clip.with_effects([AudioLoop(duration=final_clip_duration)])
+    bgm_clip = bgm_clip.with_start(0)
 
     composite_audio = CompositeAudioClip([audio_clip, bgm_clip])
-    final_clip = final_clip.set_audio(composite_audio)
+    final_clip = final_clip.with_audio(composite_audio)
     print(final_clip)
     print(f'最终成片尺寸：{final_clip.size}')
 
@@ -491,6 +559,8 @@ def multiple_video_voice_bgm_generation(project_name,
 
     final_clip.close()
     del final_clip
+    if subtitle_enabled:
+        burn_subtitles_to_video(output_file, subtitle_segments, style=subtitle_style)
     kill_ffmpeg_processes()
 
 def batch_multiple_video_voice_bgm_generation(config_file_dir):
@@ -513,10 +583,32 @@ def batch_multiple_video_voice_bgm_generation(config_file_dir):
         voice_speed = config["voice_speed"]
         voice_txt_file = config["voice_config"]["voice_txt_file"]
         voice_name = config["voice_config"]["voice_name"]
-        speech_key = config["voice_config"]["speech_key"]
+        speech_key = resolve_config_value(config["voice_config"]["speech_key"])
         service_region = config["voice_config"]["service_region"]
         number_of_video_list = config["number_of_video_list"]
         generated_quantity = config["generated_quantity"]
+        subtitle_config = config.get("subtitle_config", {})
+        subtitle_enabled = subtitle_config.get("enabled", config.get("subtitle_enabled", True))
+        subtitle_filename = subtitle_config.get("filename", config.get("subtitle_filename", "subtitles.json"))
+        split_on_comma = subtitle_config.get("split_on_comma", config.get("subtitle_split_on_comma", True))
+        split_timing_mode = subtitle_config.get(
+            "split_timing_mode",
+            config.get("subtitle_split_timing_mode", "character_ratio"),
+        )
+        subtitle_style = {
+            "font": subtitle_config.get("font", config.get("subtitle_font")),
+            "font_path": subtitle_config.get("font_path", config.get("subtitle_font_path")),
+            "font_size": subtitle_config.get("font_size", config.get("subtitle_font_size", 67)),
+            "letter_spacing": subtitle_config.get("letter_spacing", config.get("subtitle_letter_spacing", 0)),
+            "color": subtitle_config.get("color", config.get("subtitle_color", "#FFDE00")),
+            "opacity": subtitle_config.get("opacity", config.get("subtitle_opacity", 1.0)),
+            "stroke_enabled": subtitle_config.get("stroke_enabled", config.get("subtitle_stroke_enabled", True)),
+            "stroke_color": subtitle_config.get("stroke_color", config.get("subtitle_stroke_color", "#000000")),
+            "stroke_opacity": subtitle_config.get("stroke_opacity", config.get("subtitle_stroke_opacity", 1.0)),
+            "stroke_width": subtitle_config.get("stroke_width", config.get("subtitle_stroke_width", 5)),
+            "vertical_percent": subtitle_config.get("vertical_percent", config.get("subtitle_vertical_percent", 12)),
+            "max_width_percent": subtitle_config.get("max_width_percent", config.get("subtitle_max_width_percent", 86)),
+        }
 
         folder_path_list = utils.get_sorted_absolute_subdirectories(video_folder_path)
         voice_folder_path_list = utils.get_sorted_absolute_subdirectories(voice_folder_path)
@@ -525,6 +617,7 @@ def batch_multiple_video_voice_bgm_generation(config_file_dir):
         print(f'voice_folder_path_list:{voice_folder_path_list}')
 
         # generated_quantity = 5
+        print(f'总共制作视频：{generated_quantity}条')
         for i in range(generated_quantity):
             # multiple_video_generation()
             multiple_video_voice_bgm_generation(project_name=project_name,
@@ -536,7 +629,14 @@ def batch_multiple_video_voice_bgm_generation(config_file_dir):
                                       bgm_volumex=bgm_volumex,
                                       clip_size=clip_size,
                                       fps=fps,
-                                      voice_folder_path_list=voice_folder_path_list)
+                                      voice_folder_path_list=voice_folder_path_list,
+                                      subtitle_enabled=subtitle_enabled,
+                                      subtitle_filename=subtitle_filename,
+                                      subtitle_style=subtitle_style,
+                                      split_on_comma=split_on_comma,
+                                      split_timing_mode=split_timing_mode,
+                                      speech_key=speech_key,
+                                      service_region=service_region)
 
 
 

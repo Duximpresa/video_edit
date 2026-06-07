@@ -1,0 +1,23 @@
+﻿# Local media and generated artifacts
+BGM/
+input/
+output/
+storage/
+
+# IDE/cache files
+.idea/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# MoviePy/temp files
+*TEMP_MPY_wvf_snd.mp4
+*_subtitle_video_tmp.mp4
+*_subtitle_mux_tmp.mp4
+
+# Local speech-recognition model weights
+models/*
+!models/README.md
+!models/asr/
+models/asr/*
+!models/asr/.gitkeep
