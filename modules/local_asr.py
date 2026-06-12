@@ -86,11 +86,14 @@ def _cuda_info_from_nvidia_smi():
 def detect_cuda_device(minimum_memory_gb=MINIMUM_CUDA_MEMORY_GB):
     info = _cuda_info_from_torch() or _cuda_info_from_nvidia_smi()
     if info is None:
-        raise RuntimeError("未检测到可用的 NVIDIA CUDA 显卡，本地识别未启用 CPU 回退")
+        print("未检测到可用的 NVIDIA CUDA 显卡，将使用 CPU 备用识别")
+        return None
     if info["memory_gb"] < minimum_memory_gb:
-        raise RuntimeError(
+        print(
+            "警告："
             f"显卡显存只有 {info['memory_gb']:.1f}GB，"
-            f"最低要求为 {minimum_memory_gb:.1f}GB（GTX 1060 6GB）"
+            f"低于建议值 {minimum_memory_gb:.1f}GB；"
+            "程序仍会尝试 GPU，失败后可回退到 CPU"
         )
     return info
 
@@ -194,6 +197,8 @@ class LocalSpeechRecognizer:
         self.fallback_hotwords = config.get("fallback_hotwords", [])
         self.convert_to_simplified = bool(config.get("convert_to_simplified", True))
         self.download_progress = config.get("download_progress", "auto")
+        self.allow_cpu_fallback = bool(config.get("allow_cpu_fallback", True))
+        self.cpu_fallback_model = config.get("cpu_fallback_model", "base")
         self.minimum_memory_gb = float(
             config.get("minimum_cuda_memory_gb", MINIMUM_CUDA_MEMORY_GB)
         )
@@ -206,19 +211,27 @@ class LocalSpeechRecognizer:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         print(f"本地语音模型目录：{self.cache_dir}")
         self.device_info = detect_cuda_device(self.minimum_memory_gb)
-        self.device = "cuda:0"
+        self.device = "cuda:0" if self.device_info is not None else "cpu"
         self._paraformer = None
         self._whisper_models = {}
         self._disabled_attempts = set()
         self.last_backend = None
         self.last_model = None
 
-        print(
-            "本地语音识别设备："
-            f"{self.device_info['name']}，"
-            f"显存 {self.device_info['memory_gb']:.1f}GB，"
-            f"Compute Capability {self.device_info['compute_capability']}"
-        )
+        if self.device_info is not None:
+            print(
+                "本地语音识别设备："
+                f"{self.device_info['name']}，"
+                f"显存 {self.device_info['memory_gb']:.1f}GB，"
+                f"Compute Capability {self.device_info['compute_capability']}"
+            )
+        elif self.allow_cpu_fallback:
+            print(
+                "本地语音识别设备：CPU，"
+                f"备用模型 faster-whisper/{self.cpu_fallback_model}"
+            )
+        else:
+            print("本地语音识别设备：未检测到 CUDA，且 CPU 回退已关闭")
 
     def _load_paraformer(self):
         if self._paraformer is not None:
@@ -261,9 +274,10 @@ class LocalSpeechRecognizer:
         timestamps = _normalize_paraformer_timestamps(text, item.get("timestamp"))
         return text, timestamps
 
-    def _load_whisper(self, model_name):
-        if model_name in self._whisper_models:
-            return self._whisper_models[model_name]
+    def _load_whisper(self, model_name, device):
+        cache_key = (device, model_name)
+        if cache_key in self._whisper_models:
+            return self._whisper_models[cache_key]
         _configure_download_progress(self.download_progress)
         try:
             from faster_whisper import WhisperModel
@@ -272,15 +286,15 @@ class LocalSpeechRecognizer:
 
         model = WhisperModel(
             model_name,
-            device="cuda",
+            device="cuda" if device.startswith("cuda") else "cpu",
             compute_type="int8",
             download_root=str(self.cache_dir / "faster-whisper"),
         )
-        self._whisper_models[model_name] = model
+        self._whisper_models[cache_key] = model
         return model
 
-    def _transcribe_whisper(self, audio_path, model_name, language):
-        model = self._load_whisper(model_name)
+    def _transcribe_whisper(self, audio_path, model_name, language, device):
+        model = self._load_whisper(model_name, device)
         language_code = "zh" if str(language).lower().startswith("zh") else language
         hotword_prompt = (
             "品牌名称可能包括：" + "、".join(self.fallback_hotwords)
@@ -333,15 +347,34 @@ class LocalSpeechRecognizer:
             pass
 
     def transcribe(self, audio_path, language="zh-CN"):
-        attempts = [("paraformer", self.primary_model), *[
-            ("faster-whisper", model_name) for model_name in self.fallback_models
-        ]]
+        attempts = []
+        if self.device_info is not None:
+            attempts.append(("paraformer", self.primary_model, "cuda:0"))
+            attempts.extend(
+                ("faster-whisper", model_name, "cuda:0")
+                for model_name in self.fallback_models
+            )
+        if self.allow_cpu_fallback:
+            attempts.append(
+                ("faster-whisper", self.cpu_fallback_model, "cpu")
+            )
+        configured_attempts = attempts
         attempts = [
-            attempt for attempt in attempts if attempt not in self._disabled_attempts
+            attempt
+            for attempt in configured_attempts
+            if attempt not in self._disabled_attempts
         ]
+        if not configured_attempts:
+            raise RuntimeError(
+                "没有可用的本地识别方案：未检测到 CUDA，且 CPU 回退已关闭"
+            )
+        if not attempts:
+            raise RuntimeError(
+                "没有可用的本地识别方案：当前设备上的识别模型此前均已失败"
+            )
         failures = []
 
-        for backend, model_name in attempts:
+        for backend, model_name, device in attempts:
             started_at = time.perf_counter()
             try:
                 if backend == "paraformer":
@@ -351,12 +384,13 @@ class LocalSpeechRecognizer:
                         audio_path,
                         model_name,
                         language,
+                        device,
                     )
                 result = TranscriptionResult(
                     text=text,
                     backend=backend,
                     model=model_name,
-                    device=self.device,
+                    device=device,
                     elapsed_seconds=round(time.perf_counter() - started_at, 3),
                     timestamps=timestamps,
                 )
@@ -364,19 +398,20 @@ class LocalSpeechRecognizer:
                 self.last_model = model_name
                 print(
                     f"本地识别成功：{Path(audio_path).name}，"
-                    f"模型 {backend}/{model_name}，"
+                    f"模型 {backend}/{model_name}，设备 {device}，"
                     f"耗时 {result.elapsed_seconds:.3f}s"
                 )
                 return result
             except Exception as exc:
-                failures.append(f"{backend}/{model_name}: {exc}")
+                failures.append(f"{backend}/{model_name}@{device}: {exc}")
                 if _should_disable_attempt(exc):
-                    self._disabled_attempts.add((backend, model_name))
+                    self._disabled_attempts.add((backend, model_name, device))
                 print(f"本地识别模型失败，尝试下一级：{failures[-1]}")
                 if backend == "paraformer":
                     self._paraformer = None
                 else:
-                    self._whisper_models.pop(model_name, None)
-                self._release_cuda_memory()
+                    self._whisper_models.pop((device, model_name), None)
+                if device.startswith("cuda"):
+                    self._release_cuda_memory()
 
         raise RuntimeError("所有本地识别模型均失败；" + "；".join(failures))

@@ -32,7 +32,7 @@ D:\ProgramData\miniconda3\envs\main\python.exe -m pip install -r requirements.tx
 D:\ProgramData\miniconda3\envs\main\python.exe -m pip install -r requirements-local-asr.txt
 ```
 
-本地识别默认使用 Paraformer-zh，失败时依次回退到 faster-whisper `small` 和 `base`。最低目标显卡为 GTX 1060 6GB，不默认回退到 CPU。
+本地识别默认使用 Paraformer-zh，失败时依次回退到 faster-whisper `small` 和 `base`。6GB 是建议显存警告阈值，不是启动门槛；CUDA 不可用或 GPU 模型全部失败时，默认回退到 CPU faster-whisper `base`。
 
 模型应缓存在项目外，例如：
 
@@ -87,7 +87,9 @@ D:\ProgramData\miniconda3\envs\main\python.exe -m pip install -r requirements-lo
 - 默认后端为 `local_paraformer`。
 - Paraformer 使用 `ct-punc` 补充标点，并支持热词和字符级时间戳。
 - GTX 1060 等低显存设备使用单文件、`batch_size=1`。
-- CUDA 不可用、模型加载失败或 OOM 时，按配置回退到 faster-whisper。
+- `minimum_cuda_memory_gb` 只用于警告，不得因低于阈值而阻止识别器初始化。
+- CUDA 不可用、模型加载失败或 OOM 时，先按配置尝试 GPU faster-whisper，再按 `allow_cpu_fallback` 回退到 CPU `cpu_fallback_model`。
+- GPU 与 CPU 尝试必须分别记录失败状态，GPU 模型失败不得禁用同名 CPU 模型。
 - `download_progress` 应保持终端单行刷新，避免模型下载刷出大量空行。
 - `convert_to_simplified` 控制繁体转简体。
 - 品牌名、商品名和材质词应通过配置中的热词维护，不要硬编码到识别模块。
