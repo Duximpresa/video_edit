@@ -126,6 +126,8 @@ python generate_subtitle_maps.py --voice-root "input\赫学熊\索罗娜短袖\a
   "punctuation_model": "ct-punc",
   "fallback_models": ["small", "base"],
   "minimum_cuda_memory_gb": 6,
+  "allow_cpu_fallback": true,
+  "cpu_fallback_model": "base",
   "model_cache_dir": "models\\asr",
   "download_progress": "auto",
   "convert_to_simplified": true,
@@ -138,7 +140,9 @@ python generate_subtitle_maps.py --voice-root "input\赫学熊\索罗娜短袖\a
 - `primary_model`：中文主模型，默认 `paraformer-zh`。
 - `punctuation_model`：本地标点恢复模型，默认 `ct-punc`，用于自动生成逗号、问号等。
 - `fallback_models`：主模型加载或推理失败后，按顺序尝试 faster-whisper INT8 模型。
-- `minimum_cuda_memory_gb`：最低显存要求，默认 `6`，对应 GTX 1060 6GB。
+- `minimum_cuda_memory_gb`：建议显存警告阈值，默认 `6`。低于该值仍会尝试 GPU。
+- `allow_cpu_fallback`：CUDA 不可用或 GPU 模型全部失败时，是否自动使用 CPU，默认开启。
+- `cpu_fallback_model`：CPU 使用的 faster-whisper 模型，默认 `base`。
 - `model_cache_dir`：模型下载位置。相对路径从项目根目录计算，默认下载到
   `models/asr`。Git 只保留 `models` 目录结构和说明文件，实际模型权重不会提交。
 - `download_progress`：`auto` 在普通 IDE 控制台隐藏刷屏进度，在终端中单行刷新；也可设为 `show` 或 `quiet`。
@@ -157,7 +161,9 @@ GTX 1060 使用单文件、`batch_size=1`，不会强制开启依赖 Tensor Core
 RTX 3060 等新显卡使用相同主模型，保证字幕结果一致。Paraformer 失败或 CUDA
 显存不足时，程序依次尝试 faster-whisper `small`、`base` 的 INT8 GPU 推理。
 回退模型只使用 `fallback_hotwords` 作为保守提示，不保证达到 Paraformer 的热词增强效果。
-本方案不自动回退 CPU；未检测到 CUDA 或显存不足 6GB 时会明确报错。
+低于 6GB 只会显示警告，不会阻止启动。未检测到 CUDA，或全部 GPU 模型加载、
+推理失败后，默认使用 faster-whisper `base` 的 CPU INT8 推理。CPU 速度通常明显
+慢于 GPU；如需禁用，可将 `allow_cpu_fallback` 设为 `false`。
 
 首次运行需要联网下载模型，下载完成后可以断网识别。安装依赖：
 

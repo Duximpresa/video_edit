@@ -270,6 +270,9 @@ class SubtitleMapGenerationTests(unittest.TestCase):
         recognizer = object.__new__(LocalSpeechRecognizer)
         recognizer.primary_model = "paraformer-zh"
         recognizer.fallback_models = ["small", "base"]
+        recognizer.cpu_fallback_model = "base"
+        recognizer.allow_cpu_fallback = True
+        recognizer.device_info = {"name": "GPU"}
         recognizer.device = "cuda:0"
         recognizer._paraformer = None
         recognizer._whisper_models = {}
@@ -290,20 +293,28 @@ class SubtitleMapGenerationTests(unittest.TestCase):
 
         self.assertEqual(result.backend, "faster-whisper")
         self.assertEqual(result.model, "small")
-        whisper.assert_called_once_with("voice.mp3", "small", "zh-CN")
+        self.assertEqual(result.device, "cuda:0")
+        whisper.assert_called_once_with("voice.mp3", "small", "zh-CN", "cuda:0")
 
     def test_local_recognizer_falls_back_from_small_to_base(self):
         recognizer = object.__new__(LocalSpeechRecognizer)
         recognizer.primary_model = "paraformer-zh"
         recognizer.fallback_models = ["small", "base"]
+        recognizer.cpu_fallback_model = "base"
+        recognizer.allow_cpu_fallback = True
+        recognizer.device_info = {"name": "GPU"}
         recognizer.device = "cuda:0"
         recognizer._paraformer = None
         recognizer._whisper_models = {}
-        recognizer._disabled_attempts = {("paraformer", "paraformer-zh")}
+        recognizer._disabled_attempts = {
+            ("paraformer", "paraformer-zh", "cuda:0")
+        }
         recognizer.last_backend = None
         recognizer.last_model = None
 
-        def whisper(_audio, model_name, _language):
+        def whisper(_audio, model_name, _language, device):
+            if device == "cpu":
+                return "CPU base识别成功", []
             if model_name == "small":
                 raise RuntimeError("CUDA out of memory")
             return "base识别成功", []
@@ -316,20 +327,116 @@ class SubtitleMapGenerationTests(unittest.TestCase):
             result = recognizer.transcribe("voice.mp3")
 
         self.assertEqual(result.model, "base")
-        self.assertIn(("faster-whisper", "small"), recognizer._disabled_attempts)
+        self.assertEqual(result.device, "cuda:0")
+        self.assertIn(
+            ("faster-whisper", "small", "cuda:0"),
+            recognizer._disabled_attempts,
+        )
 
-    def test_rejects_gpu_below_six_gigabytes(self):
-        low_memory_gpu = {
-            "name": "NVIDIA GeForce GTX 1060 3GB",
-            "memory_gb": 3.0,
-            "compute_capability": "6.1",
-        }
-        with patch(
-            "modules.local_asr._cuda_info_from_torch",
-            return_value=low_memory_gpu,
+    def test_memory_threshold_only_warns_and_never_blocks_gpu(self):
+        for memory_gb in (3.0, 4.0, 6.0):
+            with self.subTest(memory_gb=memory_gb):
+                gpu = {
+                    "name": f"NVIDIA GPU {memory_gb:.0f}GB",
+                    "memory_gb": memory_gb,
+                    "compute_capability": "6.1",
+                }
+                with patch(
+                    "modules.local_asr._cuda_info_from_torch",
+                    return_value=gpu,
+                ):
+                    self.assertEqual(detect_cuda_device(6.0), gpu)
+
+    def test_falls_back_to_cpu_after_all_gpu_models_fail(self):
+        recognizer = object.__new__(LocalSpeechRecognizer)
+        recognizer.primary_model = "paraformer-zh"
+        recognizer.fallback_models = ["small", "base"]
+        recognizer.cpu_fallback_model = "base"
+        recognizer.allow_cpu_fallback = True
+        recognizer.device_info = {"name": "GPU"}
+        recognizer.device = "cuda:0"
+        recognizer._paraformer = None
+        recognizer._whisper_models = {}
+        recognizer._disabled_attempts = set()
+        recognizer.last_backend = None
+        recognizer.last_model = None
+
+        def whisper(_audio, model_name, _language, device):
+            if device == "cuda:0":
+                raise RuntimeError("CUDA out of memory")
+            return "CPU识别成功", []
+
+        with patch.object(
+            recognizer,
+            "_transcribe_paraformer",
+            side_effect=RuntimeError("CUDA out of memory"),
+        ), patch.object(
+            recognizer,
+            "_transcribe_whisper",
+            side_effect=whisper,
         ):
-            with self.assertRaisesRegex(RuntimeError, "最低要求"):
-                detect_cuda_device(6.0)
+            result = recognizer.transcribe("voice.mp3")
+
+        self.assertEqual(result.model, "base")
+        self.assertEqual(result.device, "cpu")
+        self.assertNotIn(
+            ("faster-whisper", "base", "cpu"),
+            recognizer._disabled_attempts,
+        )
+
+    def test_uses_cpu_directly_when_cuda_is_unavailable(self):
+        recognizer = object.__new__(LocalSpeechRecognizer)
+        recognizer.primary_model = "paraformer-zh"
+        recognizer.fallback_models = ["small", "base"]
+        recognizer.cpu_fallback_model = "base"
+        recognizer.allow_cpu_fallback = True
+        recognizer.device_info = None
+        recognizer.device = "cpu"
+        recognizer._paraformer = None
+        recognizer._whisper_models = {}
+        recognizer._disabled_attempts = set()
+        recognizer.last_backend = None
+        recognizer.last_model = None
+
+        with patch.object(
+            recognizer,
+            "_transcribe_paraformer",
+        ) as paraformer, patch.object(
+            recognizer,
+            "_transcribe_whisper",
+            return_value=("CPU识别成功", []),
+        ) as whisper:
+            result = recognizer.transcribe("voice.mp3")
+
+        paraformer.assert_not_called()
+        whisper.assert_called_once_with("voice.mp3", "base", "zh-CN", "cpu")
+        self.assertEqual(result.device, "cpu")
+
+    def test_reports_when_cuda_and_cpu_fallback_are_unavailable(self):
+        recognizer = object.__new__(LocalSpeechRecognizer)
+        recognizer.primary_model = "paraformer-zh"
+        recognizer.fallback_models = ["small", "base"]
+        recognizer.cpu_fallback_model = "base"
+        recognizer.allow_cpu_fallback = False
+        recognizer.device_info = None
+        recognizer._disabled_attempts = set()
+
+        with self.assertRaisesRegex(RuntimeError, "CPU 回退已关闭"):
+            recognizer.transcribe("voice.mp3")
+
+    def test_reports_when_all_configured_attempts_were_disabled(self):
+        recognizer = object.__new__(LocalSpeechRecognizer)
+        recognizer.primary_model = "paraformer-zh"
+        recognizer.fallback_models = ["small", "base"]
+        recognizer.cpu_fallback_model = "base"
+        recognizer.allow_cpu_fallback = True
+        recognizer.device_info = None
+        recognizer._disabled_attempts = {
+            ("faster-whisper", "base", "cpu")
+        }
+
+        with self.assertRaisesRegex(RuntimeError, "此前均已失败"):
+            recognizer.transcribe("voice.mp3")
 
     def test_split_uses_cached_local_timestamps_without_azure(self):
         with tempfile.TemporaryDirectory() as temp_dir:
